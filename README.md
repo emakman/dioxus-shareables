@@ -53,9 +53,9 @@
         ...
     }
     ```
-    `List` is a [`Vec`] internally, and the methods it implements therefore get their names and behavior from [`Vec`].
+    `List` is a `Vec` internally, and the methods it implements therefore get their names and behavior from `Vec`.
 1. The `shareable_struct!{}` macro provides a shared `struct` with interfaces that encapsulate different behavior.
-    The idea is that each field of the struct will be stored in a separate global, and loaded only when requested. The actions block describes possible ways of using the struct in terms of what type of access ([`W`](crate::W) or [`RW`](crate::RW)) they need to fields of the struct.
+    The idea is that each field of the struct will be stored in a separate global, and loaded only when requested. The actions block describes possible ways of using the struct in terms of what type of access (`W` or `RW`) they need to fields of the struct.
     The struct can then be initialized using an "action" which describes which fields we need which type of access to.
 
     ```rust
