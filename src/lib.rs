@@ -1,7 +1,8 @@
-//! Crate `dioxus-shareable`
+//! Crate [`dioxus-shareables`](crate)
 //!
-//! This crate provides abstractions for global resource sharing in `Dioxus` similar to, fermi, but
-//! with a slightly different data model, and some extensions for shared structures.
+//! This crate provides abstractions for global resource sharing in
+//! [`dioxus`](https://docs.rs/dioxus) similar to `fermi`, but with a slightly different data
+//! model, and some extensions for shared structures.
 pub mod shared;
 pub use shared::Shared;
 

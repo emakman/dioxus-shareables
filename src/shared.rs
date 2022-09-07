@@ -188,8 +188,8 @@ pub trait Static {
 /// A hook to a shared_value.
 ///
 /// This is generally created by calling `use_rw` or `use_w` on a [`shareable!`], or by
-/// calling [`ListEntry::use_rw`](`crate::list::ListEntry`) or
-/// [`ListEntry::use_w`](`crate::list::ListEntry`).
+/// calling [`ListEntry::use_rw`](`crate::list::ListEntry::use_rw`) or
+/// [`ListEntry::use_w`](`crate::list::ListEntry::use_w`).
 pub struct Shared<T: 'static, B: 'static> {
     link: Arc<Link<T>>,
     pub id: Option<usize>,
