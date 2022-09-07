@@ -9,14 +9,14 @@ documentation = "https://docs.rs/dioxus-shareables"
 repository = "https://github.com/emakman/dioxus-shareables"
 readme = "README.md"
 keywords = ["dioxus"]
-exclude = ["deny.toml"]
+include = ["src/**/*.rs", "Cargo.toml", "LICENSE"]
 
 [features]
 debugging = []
 
 [dependencies]
 dioxus-core = "0.2.1"
-paste = "1.0.8"
+paste = "1"
 
 [dev-dependencies]
 dioxus = "0.2.4"
