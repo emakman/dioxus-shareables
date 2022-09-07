@@ -293,6 +293,7 @@ pub struct LoadRW<T>(pub T);
 pub trait Implies<A> {}
 impl Implies<()> for super::RW {}
 impl Implies<()> for super::W {}
+impl Implies<()> for () {}
 impl Implies<super::W> for super::W {}
 impl Implies<super::W> for super::RW {}
 impl Implies<super::RW> for super::RW {}
