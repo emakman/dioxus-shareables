@@ -16,7 +16,7 @@
 ///                was_he: &'static str = "bear?",
 ///            }
 ///            actions for Puzzle {
-///               pub WAS: pub WasTrait = W[was_a, was_he]; // declares an WAS constant, as well an
+///               pub WAS: pub WasTrait = W[was_a, was_he]; // declares a WAS constant, as well an
 ///                                                         // equivalent trait.
 ///               INIT = W[wuzzy, was_a], RW[was_he]; // declares the INIT constant, but no
 ///                                                   // equivalent trait.
@@ -31,12 +31,18 @@
 ///               // ...
 ///            }
 ///        }
+///        impl Fuzzy<TypeofWAS> { // The TypeofWAS type is the type of the WAS constant.
+///            pub fn picky_method(&self) {
+///               //...
+///            }
+///        }
 ///        // ...
 ///        fn component(cx: Scope) -> Element {
 ///             let fuzzy = Fuzzy::use_(&cx, INIT); // This creates the hooks for the struct and initializes it
 ///                                                 // from the necessary globals.
 ///             // ...
 ///             fuzzy.method(); // This is ok, since the INIT action includes everything the WAS action does.
+///             // fuzzy.picky_method(); // This wouldn't compile, though, because INIT isn't WAS.
 ///             // ...
 ///             # rsx! {cx, div {}}
 ///        }
@@ -133,7 +139,8 @@ macro_rules! shareable_struct {
                     $crate::r#struct::Implies<<B as $crate::r#struct::InitField<[<$Struct Field_ $field>]>>::Flag>,)*
             {}
             $(
-                $action_vis const $ACTION: [($($($crate::r#struct::LoadW<[<$Struct Field_ $w>]>,)*)?$($($crate::r#struct::LoadRW<[<$Struct Field_ $rw>]>,)*)?); 1]
+                $action_vis type [<Typeof $ACTION>] =  [($($($crate::r#struct::LoadW<[<$Struct Field_ $w>]>,)*)?$($($crate::r#struct::LoadRW<[<$Struct Field_ $rw>]>,)*)?); 1];
+                $action_vis const $ACTION: [<Typeof $ACTION>]
                     = [($($($crate::r#struct::LoadW([<$Struct Field_ $w>]),)*)?$($($crate::r#struct::LoadRW([<$Struct Field_ $rw>]),)*)?)];
                 $crate::__struct! {@@
                     $([$trait_vis $Trait])?
