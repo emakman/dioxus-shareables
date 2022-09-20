@@ -66,18 +66,16 @@
             was_a: u16 = 59,
             was_he: &'static str = "bear?",
         }
-        actions for Puzzle {
-           pub WAS: pub WasTrait = W[was_a, was_he]; // declares an WAS constant, as well an
-                                                     // equivalent trait.
-           INIT = W[wuzzy, was_a], RW[was_he]; // declares the INIT constant, but no
-                                               // equivalent trait.
-        }
-    };
+        action WAS impl pub WasTrait = W[was_a, was_he]; // declares a WAS action constant, as well an
+                                                         // equivalent trait.
+        action INIT = W[wuzzy, was_a] RW[was_he]; // declares the INIT constant, but no
+                                                  // equivalent trait.
+    }
     impl<A: FuzzyActions> Fuzzy<A> {
         pub fn method(&self) where A: WasTrait {
            let me = self.with_actions(WAS); // Pending updates to the rust trait system, we
                                             // have to typecast here to get a Fuzzy<WAS>.
-           *me.was_he().write() = "bare!"; // We have write access to was_he
+           *me.was_he().write() = "bare!"; // We have access to was_he
            // self.wuzzy(); // but this would fail because we don't have access to wuzzy.
            // ...
         }
@@ -89,5 +87,6 @@
          // ...
          fuzzy.method(); // This is ok, since the INIT action includes everything the WAS action does.
          // ...
+         cx.render(rsx!{div{}})
     }
     ```

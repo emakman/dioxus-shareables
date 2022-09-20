@@ -1,7 +1,7 @@
 [package]
 name = "dioxus-shareables"
-author = "Tamvana Makuluni <29412577+emakman@users.noreply.github.com>"
-version = "1.1.1"
+author = "Tamvana Makuluni"
+version = "2.0.0"
 edition = "2021"
 license = "MIT"
 description = "Hooks for sharing structures between components."

@@ -1,306 +1,1070 @@
+pub trait ShareableStruct: Sized {
+    type Fields;
+    type Actions;
+}
+pub trait FieldOf<S: ShareableStruct> {
+    type RWType;
+    type WType;
+    const RW: Self::RWType;
+    const W: Self::WType;
+}
+pub trait InitWith<O: super::InitType>: super::InitType {
+    type Flag: super::InitType;
+}
+impl InitWith<()> for () {
+    type Flag = ();
+}
+impl InitWith<super::W> for () {
+    type Flag = super::W;
+}
+impl InitWith<super::RW> for () {
+    type Flag = super::RW;
+}
+impl InitWith<()> for super::W {
+    type Flag = super::W;
+}
+impl InitWith<super::W> for super::W {
+    type Flag = super::W;
+}
+impl InitWith<super::RW> for super::W {
+    type Flag = super::RW;
+}
+impl InitWith<()> for super::RW {
+    type Flag = super::RW;
+}
+impl InitWith<super::W> for super::RW {
+    type Flag = super::RW;
+}
+impl InitWith<super::RW> for super::RW {
+    type Flag = super::RW;
+}
+pub trait ImpliesInitField<O: super::InitType>: super::InitType {}
+impl<A: super::InitType, B: InitWith<A, Flag = A>> ImpliesInitField<B> for A {}
+
+pub trait InitField<F> {
+    type Flag: super::InitType;
+}
+impl<F> InitField<F> for () {
+    type Flag = ();
+}
+impl<F, T: super::InductiveMarkerTuple> InitField<F> for T
+where
+    T::Step: InitField<F>,
+    T::Base: InitField<F>,
+    <T::Base as InitField<F>>::Flag: InitWith<<T::Step as InitField<F>>::Flag>,
+{
+    type Flag =
+        <<T::Base as InitField<F>>::Flag as InitWith<<T::Step as InitField<F>>::Flag>>::Flag;
+}
+pub trait InitSubstruct<F> {
+    type Actions;
+    fn substruct_actions(&self) -> Self::Actions;
+}
+impl<F> InitSubstruct<F> for () {
+    type Actions = ();
+    fn substruct_actions(&self) {}
+}
+impl<F, T: super::InductiveMarkerTuple> InitSubstruct<F> for T
+where
+    T::Step: InitSubstruct<F> + Copy,
+    T::Base: InitSubstruct<F> + Copy,
+{
+    type Actions = (
+        <T::Base as InitSubstruct<F>>::Actions,
+        <T::Step as InitSubstruct<F>>::Actions,
+    );
+    fn substruct_actions(&self) -> Self::Actions {
+        (
+            self.base().substruct_actions(),
+            self.step().substruct_actions(),
+        )
+    }
+}
+
+pub trait WriteActions {}
+impl WriteActions for () {}
+impl<T: super::InductiveMarkerTuple> WriteActions for T
+where
+    T::Base: WriteActions,
+    T::Step: WriteActions,
+{
+}
+
+pub trait InitFieldAs<F, Flag: super::InitType>: InitField<F> {}
+impl<F, T: InitField<F>, Flag: super::InitType> InitFieldAs<F, Flag> for T where
+    <T as InitField<F>>::Flag: ImpliesInitField<Flag>
+{
+}
+
+/// &'static str is not allowed for const generics, but we can imitate a &'static [u8; 256] bound
+/// using a lot of ints here.
+pub trait AssocType<
+    const _0: u128,
+    const _1: u128,
+    const _2: u128,
+    const _3: u128,
+    const _4: u128,
+    const _5: u128,
+    const _6: u128,
+    const _7: u128,
+    const _8: u128,
+    const _9: u128,
+    const _10: u128,
+    const _11: u128,
+    const _12: u128,
+    const _13: u128,
+    const _14: u128,
+    const _15: u128,
+>
+{
+    type Type;
+}
+pub const fn seg_str(s: &'static str, r: usize) -> u128 {
+    let mut i = 0;
+    let mut c = 0;
+    loop {
+        if i >= 16 || r + i >= s.len() {
+            return c;
+        }
+        c += (s.as_bytes()[r + i] as u128) << 8 * (i as usize);
+        i += 1;
+    }
+}
+
 /// Create a `struct` definition for a global.
 ///
 /// The idea is that each field of the struct will be stored in a separate global, and loaded only
 /// when requested. The actions block describes possible ways of using the struct in terms of what
 /// type of access ([`W`](crate::W) or [`RW`](crate::RW)) they need to fields of the struct.
 ///
-/// The struct can then be initialized using an "action" which describes which fields we need which
-/// type of access to.
+/// The basic syntax is as follows:
+/// ```
+///     dioxus_shareables::shareable_struct! {
+///         pub struct GlobalState {
+///             a: usize = 8,
+///             b: u16 = 12,
+///             c: Vec<u8> = vec![],
+///         }
+///
+///         action A impl pub ATrait = W[a] RW[b]; // Action A with equivalent trait ATrait
+///         pub action B: BType = W[b] RW[a, c]; // Action B with equivalent type BType
+///         action C: pub CType = RW[c]; // Action C with equivalent type CType
+///         action D_ACTION impl pub D = W[c]; // Action D_ACTION with equivalent trait D.
+///     }
+/// ```
+/// First we declare the struct itself, then "actions" which represent different views of the
+/// struct. When we use the struct, we then have to declare which actions we need:
 ///
 /// ```
-///        # use dioxus::prelude::*;
-///        dioxus_shareables::shareable_struct! {
-///            pub struct Fuzzy {
-///                wuzzy: u8 = 17,
-///                was_a: u16 = 59,
-///                was_he: &'static str = "bear?",
-///            }
-///            actions for Puzzle {
-///               pub WAS: pub WasTrait = W[was_a, was_he]; // declares a WAS constant, as well an
-///                                                         // equivalent trait.
-///               INIT = W[wuzzy, was_a], RW[was_he]; // declares the INIT constant, but no
-///                                                   // equivalent trait.
-///            }
-///        };
-///        impl<A: FuzzyActions> Fuzzy<A> {
-///            pub fn method(&self) where A: WasTrait {
-///               let me = self.with_actions(WAS); // Pending updates to the rust trait system, we
-///                                                // have to typecast here to get a Fuzzy<WAS>.
-///               *me.was_he().write() = "bare!"; // We have write access to was_he
-///               // self.wuzzy(); // but this would fail because we don't have access to wuzzy.
-///               // ...
-///            }
-///        }
-///        impl Fuzzy<TypeofWAS> { // The TypeofWAS type is the type of the WAS constant.
-///            pub fn picky_method(&self) {
-///               //...
-///            }
-///        }
-///        // ...
-///        fn component(cx: Scope) -> Element {
-///             let fuzzy = Fuzzy::use_(&cx, INIT); // This creates the hooks for the struct and initializes it
-///                                                 // from the necessary globals.
+///     # use dioxus::prelude::*;
+///     # dioxus_shareables::shareable_struct! {
+///     #     pub struct GlobalState {
+///     #         a: usize = 8,
+///     #         b: u16 = 12,
+///     #         c: Vec<u8> = vec![],
+///     #     }
+///     #
+///     #   action A impl pub ATrait = W[a] RW[b]; // Action A with equivalent trait ATrait
+///     #   pub action B: BType = W[b] RW[a, c]; // Action B with equivalent type BType
+///     #   action C: pub CType = RW[c]; // Action C with equivalent type CType
+///     #   action D_ACTION impl pub D = W[c]; // Action D_ACTION with equivalent trait D.
+///     # }
+///     # #[allow(non_snake_case)]
+///     fn Component(cx: Scope) -> Element {
+///         let state = GlobalState::use_(&cx, (A, B)); // Use GlobalState with actions A and B.
+///         // ...
+///         let b = *state.b().read(); // We can access field b because actions B includes it.
+///         //...
+///         # cx.render(rsx! {
+///         #     div {
+///         #       onmousedown: |_| { *state.a().write() += 1; },
+///         #       onmouseover: |_| { *state.b().write() -= 3; }
+///         #     }
+///         # })
+///     }
+/// ```
+///
+/// Of course, there's not a lot of point to grouping shared variables into a type if we don't
+/// implement some methods on the type. This is where the types on the actions come in:
+/// ```
+///     # use dioxus::prelude::*;
+///     # dioxus_shareables::shareable_struct! {
+///     #     pub struct GlobalState {
+///     #         a: usize = 8,
+///     #         b: u16 = 12,
+///     #         c: Vec<u8> = vec![],
+///     #     }
+///     #
+///     #   action A = W[a] RW[b]; // Action A with equivalent trait ATrait
+///     #   pub action B: BType = W[b] RW[a, c]; // Action B with equivalent type BType
+///     #   action C: pub CType = RW[c]; // Action C with equivalent type CType
+///     #   action D_ACTION impl pub D = W[c]; // Action D_ACTION with equivalent trait D.
+///     # }
+///     impl GlobalState<CType> {
+///         pub fn c_method(&self) {
+///             // Do some stuff...
+///         }
+///     }
+///     // Valid action markers implement GlobalStateActions:
+///     impl<Actions: GlobalStateActions> GlobalState<Actions> {
+///         // N.B. that D is the trait, not the actions constant:
+///         pub fn clever_d_method(&self) where Actions: D {
+///             let self_ = self.with_actions(D_ACTION); // We probably want to typecast
+///                                                      // at the start of the method.
 ///             // ...
-///             fuzzy.method(); // This is ok, since the INIT action includes everything the WAS action does.
-///             // fuzzy.picky_method(); // This wouldn't compile, though, because INIT isn't WAS.
+///         }
+///     }
+///     // ...
+///     # #[allow(non_snake_case)]
+///     fn Component(cx: Scope) -> Element {
+///         let a_state = GlobalState::use_(&cx, A);
+///         let b_state = GlobalState::use_(&cx, B);
+///         let c_state = GlobalState::use_(&cx, C);
+///
+///         // a_state.c_method(); // This will fail since `a_state` doesn't doesn't meet the RW[c] requirement.
+///         // b_state.c_method(); // This will fail because the type is wrong.
+///         b_state.as_ref().c_method(); // This works, but only if the type resolves correctly.
+///         b_state.with_actions(C).c_method(); // This is guaranteed to work.
+///         c_state.c_method(); // This works too.
+///
+///         // a_state.clever_d_method(); // Fails because a_state doesn't meet the W[c] requirement.
+///         b_state.clever_d_method(); // This works.
+///         c_state.clever_d_method(); // So does this.
+///         # cx.render(rsx! { div {} })
+///     }
+/// ```
+///
+/// It's up to you where you prefer to typecast.
+///
+/// You don't need to declare actions in advance to use them; in particular, you may want to use
+/// one-off action declarations on method declarations:
+/// ```
+///     # use dioxus::prelude::*;
+///     # dioxus_shareables::shareable_struct! {
+///     #     pub struct GlobalState {
+///     #         a: usize = 8,
+///     #         b: u16 = 12,
+///     #         c: Vec<u8> = vec![],
+///     #     }
+///     #
+///     #   action A = W[a] RW[b]; // Action A with equivalent trait ATrait
+///     #   pub action B: BType = W[b] RW[a, c]; // Action B with equivalent type BType
+///     #   action C: pub CType = RW[c]; // Action C with equivalent type CType
+///     #   action D_ACTION impl pub D = W[c]; // Action D_ACTION with equivalent trait D.
+///     # }
+///     impl<Actions: GlobalStateActions> GlobalState<Actions> {
+///         pub fn calculate_from_a_and_c(&self) -> usize where Actions:
+///             AsGlobalStateActions<dioxus_shareables::struct_actions!{GlobalState<{RW[a] RW[c]}>}>
+///         {
+///             let self_ = self.with_actions(dioxus_shareables::struct_actions!(GlobalState(RW[a] RW[c])));
+///             self_.a(); // you asked for it, you got it.
 ///             // ...
-///             # rsx! {cx, div {}}
-///        }
+///             # 3
+///         }
+///     }
+///     // ...
+///     # #[allow(non_snake_case)]
+///     fn Component(cx: Scope) -> Element {
+///         let a_state = GlobalState::use_(&cx, A);
+///         let b_state = GlobalState::use_(&cx, B);
+///
+///         // a_state.calculate_from_a_and_c(); // This will fail since `a_state` doesn't meet the RW[c] requirement.
+///         b_state.calculate_from_a_and_c(); // This works, but only if the type resolves correctly.
+///         # cx.render(rsx! { div {} })
+///     }
+/// ```
+///
+///
+/// If you'd like, you can also organize your shared structure into substructures. A substructure
+/// can be included in a larger shared structure by preceding the field name with a pipe like so:
+/// ```
+///     # use dioxus::prelude::*;
+///     # dioxus_shareables::shareable_struct! {
+///     #     pub struct GlobalState {
+///     #         a: usize = 8,
+///     #         b: u16 = 12,
+///     #         c: Vec<u8> = vec![],
+///     #     }
+///     #
+///     #   action A = W[a] RW[b]; // Action A with equivalent trait ATrait
+///     #   pub action B: BType = W[b] RW[a, c]; // Action B with equivalent type BType
+///     #   action C: pub CType = RW[c]; // Action C with equivalent type CType
+///     #   action D_ACTION impl pub D = W[c]; // Action D_ACTION with equivalent trait D.
+///     # }
+///     # impl<Actions: GlobalStateActions> GlobalState<Actions> {
+///     #     // N.B. that D is the trait, not the actions constant:
+///     #     pub fn clever_d_method(&self) where Actions: D {
+///     #         let self_ = self.with_actions(D_ACTION); // We probably want to typecast
+///     #                                                  // at the start of the method.
+///     #         // ...
+///     #     }
+///     # }
+///     dioxus_shareables::shareable_struct! {
+///         pub struct MoreGlobalState {
+///             u: String = "more global? more state? which is it?!".into(),
+///             v: u32 = 18,
+///             |s: GlobalState,
+///         }
+///         action UVA = W[u] RW[v] |s[A]; // The included actions for s here must be a single
+///                                        // ident which refers to a declared action for the
+///                                        // given struct.
+///         action UBC = W[u] |s[B]; // N.B.: The syntax doesn't change if B isn't in scope... B is
+///                                  // accessed as an associated type of GlobalState.
+///                                  // If you get errors involving `AssocType` bounds, this is a
+///                                  // these |s[B] style bounds are the most likely candidtates.
+///     }
+///     // ...
+///     # #[allow(non_snake_case)]
+///     fn Component(cx: Scope) -> Element {
+///         let mgs = MoreGlobalState::use_(&cx, UBC);
+///         mgs.s().clever_d_method(); // Works bcause action our mgs.s() was initialized with the
+///                                    // `B` action.
+///         // ...
+///         # cx.render(rsx! { div {} })
+///     }
 /// ```
 #[macro_export]
 macro_rules! shareable_struct {
     (
-        $vis:vis struct $Struct:ident {
-            $($field:ident: $T:ty = $init:expr),*$(,)?
+        $(#[$meta:meta])*
+        $v:vis struct $Struct:ident {
+            $($fields:tt)*
         }
-        actions for $_:ident {
-            $(
-                $action_vis:vis $ACTION:ident$(: $trait_vis:vis $Trait:ident)?
-                    = $(W[$($w:ident),*])?$(,)?$(RW[$($rw:ident),*])?;
-            )*
+        $($actions:tt)*
+    ) => {
+        $crate::shareable_struct_parse_actions! {
+            remaining_actions: {$($actions)*}
+            vis: [$v]
+            struct: [$Struct]
+            meta: [$(#[$meta:meta])*]
+            fields: {$($fields)*}
+            parsed_actions: []
         }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! shareable_struct_parse_actions {
+    ( remaining_actions: {$av:vis action $ACTION:ident$(: $ATv:vis $ATy:ident)?$(impl $ATrv:vis $ATr:ident)? = $($r:tt)*}
+      vis: $v:tt
+      struct: $s:tt
+      meta: $m:tt
+      fields: $f:tt
+      parsed_actions: $a:tt
+    ) => {
+        $crate::shareable_struct_parse_action_flags! {
+            remaining_actions: {$($r)*}
+            vis: $v
+            struct: $s
+            meta: $m
+            fields: $f
+            parsed_actions: $a
+            action: [[$ACTION] vis: [$av] type: [$($ATv$ATy)?] trait: [$($ATrv$ATr)?]]
+            w: []
+            rw: []
+            sub: []
+        }
+    };
+    ( remaining_actions: {}
+      vis: $v:tt
+      struct: $s:tt
+      meta: $m:tt
+      fields: $f:tt
+      parsed_actions: $a:tt
+    ) => {
+        $crate::shareable_struct_parse_fields! {
+            remaining_fields: $f
+            vis: $v
+            struct: $s
+            meta: $m
+            standard_fields: []
+            substruct_fields: []
+            actions: $a
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! shareable_struct_parse_action_flags {
+    ( remaining_actions: {W[$($w2:ident),*]$($r:tt)*}
+      vis: $v:tt
+      struct: $s:tt
+      meta: $m:tt
+      fields: $f:tt
+      parsed_actions: $a:tt
+      action: $ad:tt
+      w: [$($w:tt)*]
+      rw: $rw:tt
+      sub: $sub:tt
+    ) => {
+        $crate::shareable_struct_parse_action_flags! {
+            remaining_actions: {$($r)*}
+            vis: $v
+            struct: $s
+            meta: $m
+            fields: $f
+            parsed_actions: $a
+            action: $ad
+            w: [$($w)*$(,$w2)*]
+            rw: $rw
+            sub: $sub
+        }
+    };
+    ( remaining_actions: {RW[$($rw2:ident),*]$($r:tt)*}
+      vis: $v:tt
+      struct: $s:tt
+      meta: $m:tt
+      fields: $f:tt
+      parsed_actions: $a:tt
+      action: $ad:tt
+      w: $w:tt
+      rw: [$($rw:tt)*]
+      sub: $sub:tt
+    ) => {
+        $crate::shareable_struct_parse_action_flags! {
+            remaining_actions: {$($r)*}
+            vis: $v
+            struct: $s
+            meta: $m
+            fields: $f
+            parsed_actions: $a
+            action: $ad
+            w: $w
+            rw: [$($rw)*$(,$rw2)*]
+            sub: $sub
+        }
+    };
+    ( remaining_actions: {|$g:ident[$ga:ident]$($r:tt)*}
+      vis: $v:tt
+      struct: $s:tt
+      meta: $m:tt
+      fields: $f:tt
+      parsed_actions: $a:tt
+      action: $ad:tt
+      w: $w:tt
+      rw: $rw:tt
+      sub: [$($sub:tt)*]
+    ) => {
+        $crate::shareable_struct_parse_action_flags! {
+            remaining_actions: {$($r)*}
+            vis: $v
+            struct: $s
+            meta: $m
+            fields: $f
+            parsed_actions: $a
+            action: $ad
+            w: $w
+            rw: $rw
+            sub: [$($sub)*sub_actions { sub: [$g] actions: [$ga] }]
+        }
+    };
+    ( remaining_actions: {;$($r:tt)*}
+      vis: $v:tt
+      struct: $s:tt
+      meta: $m:tt
+      fields: $f:tt
+      parsed_actions: [$($a:tt)*]
+      action: [[$action:ident]$($ad:tt)*]
+      w: $w:tt
+      rw: $rw:tt
+      sub: $sub:tt
+    ) => {
+        $crate::shareable_struct_parse_actions! {
+            remaining_actions: {$($r)*}
+            vis: $v
+            struct: $s
+            meta: $m
+            fields: $f
+            parsed_actions: [$($a)*
+                action $action {
+                    $($ad)*
+                    w: $w
+                    rw: $rw
+                    sub: $sub
+                }
+            ]
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! shareable_struct_parse_fields {
+    ( remaining_fields: {$fvis:vis $f:ident: $T:ty = $init:expr$(,$($r:tt)*)?}
+      vis: $v:tt
+      struct: $s:tt
+      meta: $m:tt
+      standard_fields: [$($ff:tt)*]
+      substruct_fields: $g:tt
+      actions: $a:tt
+    ) => {
+        $crate::shareable_struct_parse_fields! {
+            remaining_fields: {$($($r)*)?}
+            vis: $v
+            struct: $s
+            meta: $m
+            standard_fields: [$($ff)*field $f { vis: [$fvis] type: [$T] init: [$init] }]
+            substruct_fields: $g
+            actions: $a
+        }
+    };
+    ( remaining_fields: {}
+      vis: $v:tt
+      struct: $s:tt
+      meta: $m:tt
+      standard_fields: $f:tt
+      substruct_fields: $g:tt
+      actions: $a:tt
+    ) => {
+        $crate::shareable_struct_main! {
+            vis: $v
+            struct: $s
+            meta: $m
+            standard_fields: $f
+            substruct_fields: $g
+            actions: $a
+        }
+    };
+    ( remaining_fields: {|$gvis:vis $g:ident: $T:ident$(::$Tc:ident)*$(,$($r:tt)*)?}
+      vis: $v:tt
+      struct: $s:tt
+      meta: $m:tt
+      standard_fields: $f:tt
+      substruct_fields: $gg:tt
+      actions: $a:tt
+    ) => {
+        $crate::shareable_struct_parse_substruct_path! {
+            rest: [$($Tc)*]
+            vis: $v
+            struct: $s
+            meta: $m
+            standard_fields: $f
+            substruct_fields: $gg
+            remaining_fields: {$($($r)*)?}
+            actions: $a
+            substruct_field: [field $g { vis: [$gvis] }]
+            head: [::]
+            tail: $T
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! shareable_struct_parse_substruct_path {
+    ( rest: [$Tn:ident$($Tc:tt)*]
+      vis: $v:tt
+      struct: $s:tt
+      meta: $m:tt
+      standard_fields: $f:tt
+      substruct_fields: $gg:tt
+      remaining_fields: $r:tt
+      actions: $a:tt
+      substruct_field: $g:tt
+      head: [$($h:tt)*]
+      tail: $Tl:ident
+    ) => {
+        $crate::shareable_struct_parse_substruct_path! {
+            rest: [$($Tc)*]
+            vis: $v
+            struct: $s
+            meta: $m
+            standard_fields: $f
+            substruct_fields: $gg
+            remaining_fields: $r
+            actions: $a
+            substruct_field: $g
+            head: [$($h)*$Tl::]
+            tail: $Tn
+        }
+    };
+    ( rest: []
+      vis: $v:tt
+      struct: $s:tt
+      meta: $m:tt
+      standard_fields: $f:tt
+      substruct_fields: [$($gg:tt)*]
+      remaining_fields: $r:tt
+      actions: $a:tt
+      substruct_field: [field $g:ident { vis: [$gvis:vis] }]
+      head: [::$($h:tt)*]
+      tail: $Tl:ident
     ) => {
         $crate::reexported::paste! {
-            #[doc(hidden)]
-            $vis trait [<$Struct Actions>]: $($crate::r#struct::InitField<[<$Struct Field_ $field>]> + )*'static {
-                fn load<P>(cx: &$crate::reexported::Scope<P>, s: &mut $Struct<Self>) {
-                    $(<Self as $crate::r#struct::InitField<[<$Struct Field_ $field>]>>::load(cx, &mut s.$field);)*
-                }
+            $crate::shareable_struct_parse_fields! {
+                remaining_fields: $r
+                vis: $v
+                struct: $s
+                meta: $m
+                standard_fields: $f
+                substruct_fields: [$($gg)*field $g { vis: [$gvis] struct: [$($h)*$Tl] actions: [$($h)*[<$Tl Actions>]] as_actions: [$($h)*[<As $Tl Actions>]] }]
+                actions: $a
             }
-            impl<T: $($crate::r#struct::InitField<[<$Struct Field_ $field>]> + )*'static> [<$Struct Actions>] for T {}
+        }
+    };
+}
 
-            #[doc(hidden)]
-            $vis trait [<$Struct WriteActions>]: $($crate::r#struct::LoadFieldWrite<[<$Struct Field_ $field>]> + )*[<$Struct Actions>] {
-                fn load(s: &mut $Struct<Self>) {
-                    $(<Self as $crate::r#struct::LoadFieldWrite<[<$Struct Field_ $field>]>>::load_write(&mut s.$field);)*
-                }
+#[doc(hidden)]
+#[macro_export]
+macro_rules! shareable_struct_main {
+    ( vis: [$v:vis]
+      struct: [$Struct:ident]
+      meta: [$(#[$meta:meta])*]
+      standard_fields: [
+          $(field $f:ident {
+              vis: [$fvis:vis]
+              type: [$fT:ty]
+              init: [$init:expr]
+          })*
+      ]
+      substruct_fields: [
+          $(field $g:ident {
+              vis: [$gvis:vis]
+              struct: [$gT:ty]
+              actions:
+              [$gAT:ty]
+              as_actions: [$AgAT:ty]
+          })*
+      ]
+      actions: [ $(
+          action $ACTION:ident {
+              vis: [$av:vis]
+              type: [$($ATv:vis$ATy:ident)?]
+              trait: [$($ATrv:vis$ATr:ident)?]
+              w: [$(,$w:ident)*]
+              rw: [$(,$rw:ident)*]
+              sub: [$(sub_actions { sub: [$sa:ident] actions: [$saA:ident] })*]
+          }
+      )* ]
+    ) => {
+        $crate::reexported::paste! {
+            $(#[$meta])*
+            $v struct $Struct<__Actions: [<$Struct Actions>] = ()> {
+                $($f: Option<$crate::Shared<$fT, <__Actions as [<$Struct Actions>]>::[<$f:camel Flag>]>>,)*
+                $($g: $gT<<__Actions as [<$Struct Actions>]>::[<$g:camel Actions>]>,)*
+                #[doc(hidden)]
+                __actions_marker: std::marker::PhantomData<__Actions>,
             }
-            impl<T: $($crate::r#struct::LoadFieldWrite<[<$Struct Field_ $field>]> + )*[<$Struct Actions>]> [<$Struct WriteActions>] for T {}
-
-            $(
-                $crate::shareable!(#[doc(hidden)]#[allow(non_camel_case_types)]$vis [<$Struct Field_ $field>]: $T = $init);
-            )*
-            $crate::__struct!(@$Struct[]$([<$Struct Field_ $field>])*);
-            $vis struct $Struct<A: [<$Struct Actions>] + ?Sized> {
-                $($field: Option<$crate::Shared<$T, <A as $crate::r#struct::InitField<[<$Struct Field_ $field>]>>::Flag>>,)*
-                _marker: std::marker::PhantomData<A>,
-            }
-            impl<A: [<$Struct Actions>]> $Struct<A> {
-                /// Hook to create an pointer to the shared data.
-                ///
-                /// The second argument describes which fields of the struct are needed.
-                /// Generally this should be one of the Actions constants created in this same macro invocation.
-                ///
-                /// _Generated in macro shared_struct!_
-                $vis fn use_<P>(cx: &$crate::reexported::Scope<P>, _: A) -> Self {
-                    let mut r = Self {
-                        $($field: None,)*
-                        _marker: std::marker::PhantomData
+            impl<__Actions: [<$Struct Actions>]> $Struct<__Actions> {
+                $v fn share(__a: __Actions) -> Self where __Actions: $crate::r#struct::WriteActions $(, <__Actions as [<$Struct Actions>]>::[<$g:camel Actions>]: $crate::r#struct::WriteActions)* {
+                    #[allow(unused_mut)]
+                    let mut self_ = Self {
+                        $($f: None,)*
+                        $($g: $gT::share([<$Struct Actions>]::[<$g _actions>](&__a)),)*
+                        __actions_marker: std::marker::PhantomData,
                     };
-                    <A as [<$Struct Actions>]>::load(cx, &mut r);
-                    r
+                    $(
+                        <__Actions::[<$f:camel Flag>] as $crate::InitType>::share_field(
+                            &mut self_.$f,
+                            <Self as $crate::r#struct::ShareableStruct>::Fields::[<$f:snake:upper>],
+                        );
+                    )*
+                    self_
                 }
-                /// Create a pointer to the shared data without a hook.
-                ///
-                /// The second argument describes which fields of the struct are needed.
-                /// Generally this should be one of the Actions constants created in this same macro invocation.
-                ///
-                /// It is almost always preferable to use the [`use_`](Self::use_) hook instead, so as to avoid
-                /// incrementing/decrementing reference counters each time the component is updated.
-                ///
-                /// _Generated in macro shared_struct!_
-                $vis fn share_without_hook(_: A) -> Self where A: [<$Struct WriteActions>] {
-                    let mut r = Self {
-                        $($field: None,)*
-                        _marker: std::marker::PhantomData
-                    };
-                    <A as [<$Struct WriteActions>]>::load(&mut r);
-                    r
-                }
-                $(
-                    $vis fn $field(&self) -> $crate::Shared<$T, <A as $crate::r#struct::InitField<[<$Struct Field_ $field>]>>::Flag>
-                    where
-                        A: $crate::r#struct::LoadField<[<$Struct Field_ $field>]>
-                    {
-                        match &self.$field {
-                            Some(r) => r.clone(),
-                            _ => unreachable!()
-                        }
+                #[doc(hidden)]
+                $v unsafe fn __uninit() -> Self {
+                    Self {
+                        $($f: None,)*
+                        $($g: $gT::__uninit(),)*
+                        __actions_marker: std::marker::PhantomData,
                     }
+                }
+                #[doc(hidden)]
+                $v fn __init_in<P>(&mut self, cx: &$crate::reexported::Scope<P>) {
+                    $(
+                        <__Actions::[<$f:camel Flag>] as $crate::InitType>::init_field(
+                            cx,
+                            &mut self.$f,
+                            <Self as $crate::r#struct::ShareableStruct>::Fields::[<$f:snake:upper>],
+                        );
+                    )*
+                    $(
+                        self.$g.__init_in(cx);
+                    )*
+                }
+                $v fn use_<'a, P>(cx: &$crate::reexported::Scope<'a, P>, _: __Actions) -> &'a mut Self {
+                    cx.use_hook(|_| {
+                        let mut self_ = unsafe { Self::__uninit() };
+                        self_.__init_in(cx);
+                        self_
+                    })
+                }
+                $v fn with_actions<B: [<$Struct Actions>]>(&self, _: B) -> &$Struct<B>
+                where __Actions: [<As $Struct Actions>]<B>
+                {
+                    unsafe { std::mem::transmute(self) }
+                }
+                $($fvis fn $f(&self) -> &$crate::Shared<$fT, <__Actions as [<$Struct Actions>]>::[<$f:camel Flag>]> where <__Actions as [<$Struct Actions>]>::[<$f:camel Flag>]: $crate::Flag {
+                    if let Some($f) = self.$f.as_ref() { $f }
+                    else { unreachable!{} }
+                })*
+                $($gvis fn $g(&self) -> &$gT<<__Actions as [<$Struct Actions>]>::[<$g:camel Actions>]> {
+                    &self.$g
+                })*
+            }
+            #[doc = "Actions on a " $Struct]
+            #[doc = "See [`dioxus_shareables::shareable_struct`] for more info"]
+            /// An actions object describes a collection of field access types you might use
+            /// together.
+            $v trait [<$Struct Actions>]: 'static + Copy {
+                $(type [<$f:camel Flag>]: $crate::InitType;)*
+                $(
+                    type [<$g:camel Actions>]: $gAT;
+                    fn [<$g _actions>](&self) -> Self::[<$g:camel Actions>];
                 )*
-                $vis fn with_actions<B: [<$Struct Actions>]>(&self, _: B) -> &$Struct<B> where A: [<Implies $Struct Actions>]<B> {
+            }
+            #[doc = "Marker trait for allowed conversions between `" [<$Struct Actions>] "` markers."]
+            #[doc = "Implementing this yourself can lead to undefined behavior."]
+            $v trait [<As $Struct Actions>]<B: [<$Struct Actions>]>: [<$Struct Actions>] {}
+            impl<A: [<$Struct Actions>], B: [<$Struct Actions>]> [<As $Struct Actions>]<B> for A
+            where
+                A: 'static
+                    $(+ $crate::r#struct::InitFieldAs<$crate::struct_assoc_type!{$Struct::Fields::$f}, <B as [<$Struct Actions>]>::[<$f:camel Flag>]>)*,
+                $(<A as [<$Struct Actions>]>::[<$g:camel Actions>]: $AgAT<<B as [<$Struct Actions>]>::[<$g:camel Actions>]>,)*
+            {
+            }
+            $(
+                $av const $ACTION: $crate::struct_assoc_type!{$Struct::Actions::$ACTION} = <$Struct as $crate::r#struct::ShareableStruct>::Actions::$ACTION;
+                $($ATv type $ATy = $crate::struct_assoc_type!{$Struct::Actions::$ACTION};)?
+                $(
+                    $ATrv trait $ATr: [<As $Struct Actions>]<$crate::struct_assoc_type!{$Struct::Actions::$ACTION}> {}
+                    impl<T: [<As $Struct Actions>]<$crate::struct_assoc_type!{$Struct::Actions::$ACTION}>> $ATr for T {}
+                )?
+            )*
+            impl<A: [<$Struct Actions>], B: [<As $Struct Actions>]<A>> AsRef<$Struct<A>> for $Struct<B> {
+                fn as_ref(&self) -> &$Struct<A> {
                     unsafe { std::mem::transmute(self) }
                 }
             }
-            #[doc(hidden)]
-            $vis trait [<Implies $Struct Actions>]<B: [<$Struct Actions>]>: [<$Struct Actions>] {}
-            impl<A: [<$Struct Actions>], B: [<$Struct Actions>]> [<Implies $Struct Actions>]<B> for A where
-                $(<A as $crate::r#struct::InitField<[<$Struct Field_ $field>]>>::Flag:
-                    $crate::r#struct::Implies<<B as $crate::r#struct::InitField<[<$Struct Field_ $field>]>>::Flag>,)*
-            {}
-            $(
-                $action_vis type [<Typeof $ACTION>] =  [($($($crate::r#struct::LoadW<[<$Struct Field_ $w>]>,)*)?$($($crate::r#struct::LoadRW<[<$Struct Field_ $rw>]>,)*)?); 1];
-                $action_vis const $ACTION: [<Typeof $ACTION>]
-                    = [($($($crate::r#struct::LoadW([<$Struct Field_ $w>]),)*)?$($($crate::r#struct::LoadRW([<$Struct Field_ $rw>]),)*)?)];
-                $crate::__struct! {@@
-                    $([$trait_vis $Trait])?
-                    [[<Implies $Struct Actions>]<[($($($crate::r#struct::LoadW<[<$Struct Field_ $w>]>,)*)?$($($crate::r#struct::LoadRW<[<$Struct Field_ $rw>]>,)*)?); 1]>]
+            impl<A: [<$Struct Actions>], B: [<As $Struct Actions>]<A>> AsMut<$Struct<A>> for $Struct<B> {
+                fn as_mut(&mut self) -> &mut $Struct<A> {
+                    unsafe { std::mem::transmute(self) }
                 }
-            )*
+            }
+            #[allow(dead_code)]
+            const _: () = {
+                $v struct [<$Struct FieldData>];
+                $v struct [<$Struct ActionData>];
+                impl<__Actions: [<$Struct Actions>]> $crate::r#struct::ShareableStruct for $Struct<__Actions> {
+                    type Fields = [<$Struct FieldData>];
+                    type Actions = [<$Struct ActionData>];
+                }
+
+                $($crate::shareable!{$v [<$Struct FieldShareable $f:camel>]: $fT = $init}
+                    impl $crate::r#struct::FieldOf<$Struct> for [<$Struct FieldShareable $f:camel>] {
+                        type WType = InitAs<[<$Struct FieldShareable $f:camel>], $crate::W>;
+                        type RWType = InitAs<[<$Struct FieldShareable $f:camel>], $crate::RW>;
+                        const W: Self::WType = InitAs([<$Struct FieldShareable $f:camel>], $crate::W);
+                        const RW: Self::RWType = InitAs([<$Struct FieldShareable $f:camel>], $crate::RW);
+                    }
+                )*
+                $(
+                    #[derive(Clone, Copy)]
+                    $v struct [<$Struct Substruct $g:camel>];
+                )*
+
+                impl [<$Struct FieldData>] {
+                    $(const [<$f:snake:upper>]: [<$Struct FieldShareable $f:camel>] = [<$Struct FieldShareable $f:camel>];)*
+                }
+                impl [<$Struct ActionData>] {
+                    $(const $ACTION:
+                        (
+                            $(InitAs<[<$Struct FieldShareable $w:camel>], $crate::W>,)*
+                            $(InitAs<[<$Struct FieldShareable $rw:camel>], $crate::RW>,)*
+                            $(InitAs<[<$Struct Substruct $sa:camel>], $crate::struct_assoc_type!{$Struct::Substructs::$sa::Actions::$saA}>,)*
+                        ) = (
+                            $(InitAs([<$Struct FieldShareable $w:camel>], $crate::W),)*
+                            $(InitAs([<$Struct FieldShareable $rw:camel>], $crate::RW),)*
+                            $(InitAs([<$Struct Substruct $sa:camel>], <$crate::struct_assoc_type!{$Struct::Fields::$sa} as $crate::r#struct::ShareableStruct>::Actions::$saA),)*
+                        );
+                    )*
+                }
+
+                #[derive(Clone, Copy)]
+                $v struct InitAs<F, A>(F, A);
+                $crate::shareable_struct_init_as_fields!{
+                    remaining_fields: [$($f)*]
+                    struct: [$Struct]
+                    init_as: [InitAs]
+                    prev_fields: []
+                    substruct_fields: [$(field $g { type: [$gAT] })*]
+                }
+                $crate::shareable_struct_init_as_substructs!{
+                    remaining_fields: [$(field $g { type: [$gAT] })*]
+                    struct: [$Struct]
+                    init_as: [InitAs]
+                    prev_fields: []
+                    standard_fields: [$($f)*]
+                }
+                impl<A:
+                    'static + Copy
+                    $(+ $crate::r#struct::InitField<[<$Struct FieldShareable $f:camel>]>)*
+                    $(+ $crate::r#struct::InitSubstruct<[<$Struct Substruct $g:camel>]>)*
+                    > [<$Struct Actions>] for A
+                where $(<A as $crate::r#struct::InitSubstruct<[<$Struct Substruct $g:camel>]>>::Actions: $gAT),* {
+                    $(type [<$f:camel Flag>] = <A as $crate::r#struct::InitField<[<$Struct FieldShareable $f:camel>]>>::Flag;)*
+                    $(
+                        type [<$g:camel Actions>] = <A as $crate::r#struct::InitSubstruct<[<$Struct Substruct $g:camel>]>>::Actions;
+                        fn [<$g _actions>](&self) -> Self::[<$g:camel Actions>] {
+                            <A as $crate::r#struct::InitSubstruct<[<$Struct Substruct $g:camel>]>>::substruct_actions(self)
+                        }
+                    )*
+                }
+
+                $($crate::struct_assoc_type!{impl $Struct::Fields::$f for [<$Struct FieldData>] = [<$Struct FieldShareable $f:camel>]})*
+                $($crate::struct_assoc_type!{impl $Struct::Fields::$g for [<$Struct FieldData>] = $gT})*
+                $($crate::struct_assoc_type!{impl $Struct::Actions::$ACTION for [<$Struct ActionData>] =
+                    (
+                        $(InitAs<[<$Struct FieldShareable $w:camel>], $crate::W>,)*
+                        $(InitAs<[<$Struct FieldShareable $rw:camel>], $crate::RW>,)*
+                        $(InitAs<[<$Struct Substruct $sa:camel>], $crate::struct_assoc_type!{$Struct::Substructs::$sa::Actions::$saA}>,)*
+                    )
+                })*
+            };
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! shareable_struct_init_as_fields {
+    ( remaining_fields: [$f:ident$($r:ident)*]
+      struct: [$Struct:ident]
+      init_as:  [$IA:ident]
+      prev_fields: [$($p:ident)*]
+      substruct_fields: [$(field $g:ident {type: [$gAT:ty]})*]
+    ) => {
+        $crate::reexported::paste! {
+            impl<A: $crate::InitType> $crate::r#struct::InitField<[<$Struct FieldShareable $f:camel>]> for InitAs<[<$Struct FieldShareable $f:camel>], A> {
+                type Flag = A;
+            }
+            $(impl<A: $crate::InitType> $crate::r#struct::InitField<[<$Struct FieldShareable $f:camel>]> for InitAs<[<$Struct FieldShareable $r:camel>], A> {
+                type Flag = ();
+            })*
+            $(impl<A: $crate::InitType> $crate::r#struct::InitField<[<$Struct FieldShareable $f:camel>]> for InitAs<[<$Struct FieldShareable $p:camel>], A> {
+                type Flag = ();
+            })*
+            $(impl<A: $gAT> $crate::r#struct::InitField<[<$Struct FieldShareable $f:camel>]> for InitAs<[<$Struct Substruct $g:camel>], A> {
+                type Flag = ();
+            })*
+        }
+        $crate::shareable_struct_init_as_fields!{
+            remaining_fields: [$($r)*]
+            struct: [$Struct]
+            init_as: [$IA]
+            prev_fields: [$($p)*$f]
+            substruct_fields: [$(field $g {type: [$gAT]})*]
+        }
+    };
+    ( remaining_fields: []
+      struct: $s:tt
+      init_as: $IA:tt
+      prev_fields: $p:tt
+      substruct_fields: $g:tt
+    ) => {};
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! shareable_struct_init_as_substructs {
+    ( remaining_fields: [field $g:ident {type: [$gAT:ty]}$(field $r:ident {type: [$rAT:ty]})*]
+      struct: [$Struct:ident]
+      init_as:  [$IA:ident]
+      prev_fields: [$(field $p:ident {type: [$pAT:ty]})*]
+      standard_fields: [$($f:ident)*]
+    ) => {
+        $crate::reexported::paste! {
+            impl<A: $gAT> $crate::r#struct::InitSubstruct<[<$Struct Substruct $g:camel>]> for InitAs<[<$Struct Substruct $g:camel>], A> {
+                type Actions = A;
+                fn substruct_actions(&self) -> A {self.1}
+            }
+            $(impl<A: $rAT> $crate::r#struct::InitSubstruct<[<$Struct Substruct $g:camel>]> for InitAs<[<$Struct Substruct $r:camel>], A> {
+                type Actions = ();
+                fn substruct_actions(&self) -> () {}
+            })*
+            $(impl<A: $pAT> $crate::r#struct::InitSubstruct<[<$Struct Substruct $g:camel>]> for InitAs<[<$Struct Substruct $p:camel>], A> {
+                type Actions = ();
+                fn substruct_actions(&self) -> () {}
+            })*
+            $(impl<A: $crate::InitType> $crate::r#struct::InitSubstruct<[<$Struct Substruct $g:camel>]> for InitAs<[<$Struct FieldShareable $f:camel>], A> {
+                type Actions = ();
+                fn substruct_actions(&self) -> () {}
+            })*
+        }
+        $crate::shareable_struct_init_as_substructs!{
+            remaining_fields: [$(field $r {type: [$rAT]})*]
+            struct: [$Struct]
+            init_as:  [$IA]
+            prev_fields: [$(field $p {type: [$pAT:ty]})*field $g {type: [$gAT]}]
+            standard_fields: [$($f)*]
+        }
+    };
+    ( remaining_fields: []
+      struct: $s:tt
+      init_as: $IA:tt
+      prev_fields: $p:tt
+      standard_fields: $g:tt
+    ) => {};
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! struct_assoc_type {
+    ($Struct:ident::Actions::$action:ident) => {
+        $crate::reexported::paste! {
+            $crate::struct_assoc_type! {
+                @(<<$Struct as $crate::r#struct::ShareableStruct>::Actions as )([<Action $action:camel>])(>::Type)
+            }
+        }
+    };
+    ($Struct:ident::Fields::$field:ident) => {
+        $crate::reexported::paste! {
+            $crate::struct_assoc_type! {
+                @(<<$Struct as $crate::r#struct::ShareableStruct>::Fields as )([<Field $field:camel>])(>::Type)
+            }
+        }
+    };
+    ($Struct:ident::Substructs::$field:ident::Actions::$action:ident) => {
+        $crate::reexported::paste! {
+            $crate::struct_assoc_type! {
+                @(<<<<$Struct as $crate::r#struct::ShareableStruct>::Fields as )([<Field $field:camel>])(>::Type)
+                @(as $crate::r#struct::ShareableStruct>::Actions as)([<Action $action>])(>::Type)
+            }
+        }
+    };
+    (impl $Struct:ident::Actions::$action:ident for $T:ty = $($what:tt)*) => {
+        $crate::reexported::paste! {
+            $crate::struct_assoc_type! {
+                @(impl)([<Action $action:camel>])(for $T { type Type = $($what)*; })
+            }
+        }
+    };
+    (impl $Struct:ident::Fields::$field:ident for $T:ty = $($what:tt)*) => {
+        $crate::reexported::paste! {
+            $crate::struct_assoc_type! {
+                @(impl)([<Field $field:camel>])( for $T { type Type = $($what)*; })
+            }
+        }
+    };
+    ($(@($($before:tt)*)($($x:tt)*)($($after:tt)*))*) => {
+        $($($before)*$crate::r#struct::AssocType<
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 0)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 1)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 2)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 3)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 4)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 5)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 6)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 7)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 8)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 9)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 10)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 11)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 12)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 13)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 14)},
+            {$crate::r#struct::seg_str(stringify!{$($x)*}, 15)},
+        >$($after)*)*
+    }
+}
+
+/// Get actions on a struct.
+///
+/// For example `dioxus_shareables::struct_actions!(GlobalState<{W[a] RW[b]}>)` gives the correct
+/// type for a `dioxus_shareables` struct with write access to field `a` and read-write access to
+/// field `b`, and `dioxus_shareables::struct_actions!(GlobalState(W[a] RW[b]))` gives a
+/// corresponding expression.
+#[macro_export]
+macro_rules! struct_actions {
+    ($Struct:ident<{$($ty:tt)*}>) => {
+        $crate::struct_actions_! {
+            unparsed: [$($ty)*]
+            produce: ty
+            struct: [$Struct]
+        }
+    };
+    ($Struct:ident($($ty:tt)*)) => {
+        $crate::struct_actions_! {
+            unparsed: [$($ty)*]
+            produce: expr
+            struct: [$Struct]
         }
     };
 }
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __struct {
-    (@$Struct:ident$before:tt) => {};
-    (@$Struct:ident[$($before:ident)*]$field:ident$($after:ident)*) => {
-        $(
-            impl<T> $crate::r#struct::InitField<$before> for $crate::Decons<T, $crate::r#struct::LoadW<$field>>
-            where
-                [T; 1]: $crate::r#struct::InitField<$before>
-            {
-                type Flag = <[T; 1] as $crate::r#struct::InitField<$before>>::Flag;
-                fn load<P>(
-                    cx: &$crate::reexported::Scope<P>,
-                    o: &mut Option<$crate::Shared<<$before as $crate::shared::Static>::Type, Self::Flag>>,
-                ) {
-                    <[T; 1] as $crate::r#struct::InitField<$before>>::load(cx, o)
-                }
-            }
-            impl<T> $crate::r#struct::LoadFieldWrite<$before> for $crate::Decons<T, $crate::r#struct::LoadW<$field>>
-            where
-                [T; 1]: $crate::r#struct::LoadFieldWrite<$before>
-            {
-                fn load_write(o: &mut Option<$crate::Shared<<$before as $crate::shared::Static>::Type, Self::Flag>>) {
-                    <[T; 1] as $crate::r#struct::LoadFieldWrite<$before>>::load_write(o)
-                }
-            }
-            impl<T> $crate::r#struct::InitField<$before> for $crate::Decons<T, $crate::r#struct::LoadRW<$field>>
-            where
-                [T; 1]: $crate::r#struct::InitField<$before>
-            {
-                type Flag = <[T; 1] as $crate::r#struct::InitField<$before>>::Flag;
-                fn load<P>(
-                    cx: &$crate::reexported::Scope<P>,
-                    o: &mut Option<$crate::Shared<<$before as $crate::shared::Static>::Type, Self::Flag>>,
-                ) {
-                    <[T; 1] as $crate::r#struct::InitField<$before>>::load(cx, o)
-                }
-            }
-        )*
-        impl<T> $crate::r#struct::InitField<$field> for $crate::Decons<T, $crate::r#struct::LoadW<$field>> {
-            type Flag = $crate::W;
-            fn load<P>(
-                cx: &$crate::reexported::Scope<P>,
-                o: &mut Option<$crate::Shared<<$field as $crate::shared::Static>::Type, Self::Flag>>,
-            ) {
-                *o = Some($field.use_w(cx));
-            }
-        }
-        impl<T> $crate::r#struct::LoadFieldWrite<$field> for $crate::Decons<T, $crate::r#struct::LoadW<$field>> {
-            fn load_write(o: &mut Option<$crate::Shared<<$field as $crate::shared::Static>::Type, Self::Flag>>) {
-                *o = Some($crate::shared::Static::share_without_hook($field));
-            }
-        }
-        impl<T> $crate::r#struct::InitField<$field> for $crate::Decons<T, $crate::r#struct::LoadRW<$field>> {
-            type Flag = $crate::RW;
-            fn load<P>(
-                cx: &$crate::reexported::Scope<P>,
-                o: &mut Option<$crate::Shared<<$field as $crate::shared::Static>::Type, Self::Flag>>,
-            ) {
-                *o = Some($field.use_rw(cx));
-            }
-        }
-        $(
-            impl<T> $crate::r#struct::InitField<$after> for $crate::Decons<T, $crate::r#struct::LoadW<$field>>
-            where
-                [T; 1]: $crate::r#struct::InitField<$after>
-            {
-                type Flag = <[T; 1] as $crate::r#struct::InitField<$after>>::Flag;
-                fn load<P>(
-                    cx: &$crate::reexported::Scope<P>,
-                    o: &mut Option<$crate::Shared<<$after as $crate::shared::Static>::Type, Self::Flag>>,
-                ) {
-                    <[T; 1] as $crate::r#struct::InitField<$after>>::load(cx, o)
-                }
-            }
-            impl<T> $crate::r#struct::LoadFieldWrite<$after> for $crate::Decons<T, $crate::r#struct::LoadW<$field>>
-            where
-                [T; 1]: $crate::r#struct::LoadFieldWrite<$after>
-            {
-                fn load_write(o: &mut Option<$crate::Shared<<$after as $crate::shared::Static>::Type, Self::Flag>>) {
-                    <[T; 1] as $crate::r#struct::LoadFieldWrite<$after>>::load_write(o)
-                }
-            }
-            impl<T> $crate::r#struct::InitField<$after> for $crate::Decons<T, $crate::r#struct::LoadRW<$field>>
-            where
-                [T; 1]: $crate::r#struct::InitField<$after>
-            {
-                type Flag = <[T; 1] as $crate::r#struct::InitField<$after>>::Flag;
-                fn load<P>(
-                    cx: &$crate::reexported::Scope<P>,
-                    o: &mut Option<$crate::Shared<<$after as $crate::shared::Static>::Type, Self::Flag>>,
-                ) {
-                    <[T; 1] as $crate::r#struct::InitField<$after>>::load(cx, o)
-                }
-            }
-        )*
-        $crate::__struct!(@$Struct[$($before)*$field]$($after)*);
+macro_rules! struct_actions_ {
+    (
+        unparsed: []
+        produce: $t:tt
+        struct: [$Struct:ident]
+    ) => {
+        ()
     };
-    (@@$_:tt) => {};
-    (@@[$vis:vis $Trait:ident][$($Equiv:tt)*]) => {
-        $vis trait $Trait: $($Equiv)* {}
-        impl<T: $($Equiv)*> $Trait for T {}
+    (
+        unparsed: [W[$($w:ident)*]$($r:tt)*]
+        produce: ty
+        struct: [$Struct:ident]
+    ) => {
+        (
+            ($(
+                <$crate::struct_assoc_type!($Struct::Fields::$w) as $crate::r#struct::FieldOf<$Struct>>::WType
+            ),*),
+            $crate::struct_actions_! {
+                unparsed: [$($r)*]
+                produce: ty
+                struct: [$Struct]
+            }
+        )
+    };
+    (
+        unparsed: [RW[$($w:ident)*]$($r:tt)*]
+        produce: ty
+        struct: [$Struct:ident]
+    ) => {
+        (
+            ($(
+                <$crate::struct_assoc_type!($Struct::Fields::$w) as $crate::r#struct::FieldOf<$Struct>>::RWType
+            ),*),
+            $crate::struct_actions_! {
+                unparsed: [$($r)*]
+                produce: ty
+                struct: [$Struct]
+            }
+        )
+    };
+    (
+        unparsed: [W[$($w:ident)*]$($r:tt)*]
+        produce: expr
+        struct: [$Struct:ident]
+    ) => {
+        (
+            ($(
+                <$crate::struct_assoc_type!($Struct::Fields::$w) as $crate::r#struct::FieldOf<$Struct>>::W
+            ),*),
+            $crate::struct_actions_! {
+                unparsed: [$($r)*]
+                produce: expr
+                struct: [$Struct]
+            }
+        )
+    };
+    (
+        unparsed: [RW[$($w:ident)*]$($r:tt)*]
+        produce: expr
+        struct: [$Struct:ident]
+    ) => {
+        (
+            ($(
+                <$crate::struct_assoc_type!($Struct::Fields::$w) as $crate::r#struct::FieldOf<$Struct>>::RW
+            ),*),
+            $crate::struct_actions_! {
+                unparsed: [$($r)*]
+                produce: expr
+                struct: [$Struct]
+            }
+        )
     };
 }
-
-pub trait InitField<F: crate::shared::Static> {
-    type Flag;
-    fn load<P>(_: &dioxus_core::Scope<P>, _: &mut Option<crate::Shared<F::Type, Self::Flag>>);
-}
-pub trait LoadField<F: crate::shared::Static>: InitField<F> {}
-impl<F: crate::shared::Static, T: InitField<F>> LoadField<F> for T where T::Flag: super::Flag {}
-
-pub trait LoadFieldWrite<F: crate::shared::Static>: InitField<F> {
-    fn load_write(_: &mut Option<crate::Shared<F::Type, Self::Flag>>);
-}
-
-impl<F: crate::shared::Static> InitField<F> for [(); 1] {
-    type Flag = ();
-    fn load<P>(_: &dioxus_core::Scope<P>, _: &mut Option<crate::Shared<F::Type, ()>>) {}
-}
-impl<F: crate::shared::Static> LoadFieldWrite<F> for [(); 1] {
-    fn load_write(_: &mut Option<crate::Shared<F::Type, ()>>) {}
-}
-
-impl<F: crate::shared::Static, T: crate::InductiveTuple> InitField<F> for [T; 1]
-where
-    T::Decons: InitField<F>,
-{
-    type Flag = <T::Decons as InitField<F>>::Flag;
-    fn load<P>(
-        cx: &dioxus_core::Scope<P>,
-        o: &mut Option<crate::Shared<<F as crate::shared::Static>::Type, Self::Flag>>,
-    ) {
-        T::Decons::load(cx, o)
-    }
-}
-impl<F: crate::shared::Static, T: crate::InductiveTuple> LoadFieldWrite<F> for [T; 1]
-where
-    T::Decons: LoadFieldWrite<F>,
-{
-    fn load_write(o: &mut Option<crate::Shared<<F as crate::shared::Static>::Type, Self::Flag>>) {
-        T::Decons::load_write(o)
-    }
-}
-pub struct LoadW<T>(pub T);
-pub struct LoadRW<T>(pub T);
-
-pub trait Implies<A> {}
-impl Implies<()> for super::RW {}
-impl Implies<()> for super::W {}
-impl Implies<()> for () {}
-impl Implies<super::W> for super::W {}
-impl Implies<super::W> for super::RW {}
-impl Implies<super::RW> for super::RW {}

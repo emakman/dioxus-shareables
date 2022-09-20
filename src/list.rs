@@ -29,7 +29,7 @@ use std::sync::Arc;
 ///         button {
 ///             onclick: move |_| {
 ///                 let mut w = w.write();
-///                 let sum = w.iter().map(|n| *n.share_without_hook().read()).sum();
+///                 let sum = w.iter().map(|n| *n.share().read()).sum();
 ///                 w.push(sum)
 ///             },
 ///             "Sum"
@@ -395,24 +395,29 @@ impl<T> ListEntry<T> {
     }
     /// Get a write-only pointer to the element.
     ///
-    /// Unlike with other shareables, this is preferred to a use_w hook because the `ListEntry` must
-    /// have been obtained from a `List` and so it is assumed that it is being used in a loop anyway.
-    pub fn share_without_hook(&self) -> Shared<T, super::W> {
+    /// This is generally how an entry is accessed from the component which owns its `List`.
+    /// If the entry was passed down from a parent component, then you generally want to call
+    /// [`use_w`](Self::use_w) or [`use_rw`](Self::use_rw) instead.
+    pub fn share(&self) -> Shared<T, super::W> {
         Shared::from_link(self.0.clone())
     }
     /// Get a write pointer to the element as a hook.
     ///
-    /// *Note:* THIS IS OFTEN NOT WHAT YOU WANT; if you are in a loop (say, iterating over the
-    /// list) then this will cause trouble. Only use this on a `ListEntry` that has been passed
-    /// from another component.
-    pub fn use_w<P>(&self, cx: &dioxus_core::Scope<P>) -> Shared<T, super::W> {
+    /// This is the expected way to get write-only access to an entry when it is passed down from a
+    /// parent component. If you need to access an entry in the component which owns the list it
+    /// belongs to, then you generally need to use [`share`](Self::share) instead.
+    pub fn use_w<'a, P>(&self, cx: &dioxus_core::Scope<'a, P>) -> &'a mut Shared<T, super::W> {
         let mut opt = Shareable(Some(Arc::downgrade(&self.0)));
         Shared::init(cx, &mut opt, || unreachable!(), super::W)
     }
     /// Get a read-write pointer to the element.
     ///
     /// Scope `cx` will be registered as needing update every time the referenced value changes.
-    pub fn use_rw<P>(&self, cx: &dioxus_core::Scope<P>) -> Shared<T, super::RW> {
+    ///
+    /// This is the expected ways to get read/write access an entry when it is passed down from a
+    /// parent component. If you need to access an entry in the component which owns the list it
+    /// belongs to, then you generally need to use [`share`](Self::share) instead.
+    pub fn use_rw<'a, P>(&self, cx: &dioxus_core::Scope<'a, P>) -> &'a mut Shared<T, super::RW> {
         let mut opt = Shareable(Some(Arc::downgrade(&self.0)));
         Shared::init(cx, &mut opt, || unreachable!(), super::RW)
     }

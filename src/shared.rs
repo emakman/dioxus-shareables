@@ -133,13 +133,14 @@ impl<T> Shareable<T> {
 macro_rules! shareable {
     ($(#[$meta:meta])*$vis:vis $IDENT:ident: $Ty:ty = $($init:tt)*) => {
         $(#[$meta])*
+        #[derive(Clone, Copy)]
         $vis struct $IDENT;
         impl $IDENT {
             /// Obtain a RW pointer to the shared value.
             ///
             /// `cx` will be marked as needing update each time you call `.write()` or
             /// `.set()` on this value.
-            pub fn use_rw<P>(self,cx: &$crate::reexported::Scope<P>) -> $crate::Shared<$Ty, $crate::RW> {
+            pub fn use_rw<'a, P>(self,cx: &$crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::RW> {
                 $crate::shared::Static::_use_rw(self, cx)
             }
             /// Obtain a write pointer to the shared value.
@@ -150,8 +151,18 @@ macro_rules! shareable {
             /// The promise you are making when you `use_w` is that your component does not
             /// need to know when the value changes; i.e., you might read the value, but it
             /// doesn't change what you display.
-            pub fn use_w<P>(self,cx: &$crate::reexported::Scope<P>) -> $crate::Shared<$Ty, $crate::W> {
+            pub fn use_w<'a, P>(self,cx: &$crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::W> {
                 $crate::shared::Static::_use_w(self, cx)
+            }
+            /// Get a pointer to the value, but don't call 'use_hook'.
+            ///
+            /// This is generally to be avoided in components, but should be used when the shared
+            /// must be initialized within a loop, or within the initializer of another hook.
+            ///
+            /// If you don't know why you should be using it, use either [`use_rw`](Self::use_rw)
+            /// or [`use_w`](Self::use_w) instead.
+            pub fn share(self) -> $crate::Shared<$Ty, $crate::W> {
+                $crate::shared::Static::_share(self)
             }
         }
         const _: () = {
@@ -160,13 +171,13 @@ macro_rules! shareable {
             #[doc(hidden)]
             impl $crate::shared::Static for $IDENT {
                 type Type = $Ty;
-                fn share_without_hook(self) -> $crate::Shared<$Ty, $crate::W> {
+                fn _share(self) -> $crate::Shared<$Ty, $crate::W> {
                     $crate::Shared::from_shareable(unsafe { &mut $IDENT }, || {$($init)*})
                 }
-                fn _use_rw<P>(self,cx: &$crate::reexported::Scope<P>) -> $crate::Shared<$Ty, $crate::RW> {
+                fn _use_rw<'a, P>(self,cx: &$crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::RW> {
                     $crate::Shared::init(cx, unsafe { &mut $IDENT }, || {$($init)*}, $crate::RW)
                 }
-                fn _use_w<P>(self,cx: &$crate::reexported::Scope<P>) -> $crate::Shared<$Ty, $crate::W> {
+                fn _use_w<'a, P>(self,cx: &$crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::W> {
                     $crate::Shared::init(cx, unsafe { &mut $IDENT }, || {$($init)*}, $crate::W)
                 }
             }
@@ -177,12 +188,12 @@ macro_rules! shareable {
 #[doc(hidden)]
 pub trait Static {
     type Type;
-    /// Get a pointer to the value, but don't call 'use_hook'.
-    ///
-    /// This is to be avoided in components, and so is intentionally not exposed in docs.
-    fn share_without_hook(self) -> Shared<Self::Type, super::W>;
-    fn _use_rw<P>(self, cx: &dioxus_core::Scope<P>) -> Shared<Self::Type, super::RW>;
-    fn _use_w<P>(self, cx: &dioxus_core::Scope<P>) -> Shared<Self::Type, super::W>;
+    fn _share(self) -> Shared<Self::Type, super::W>;
+    fn _use_rw<'a, P>(
+        self,
+        cx: &dioxus_core::Scope<'a, P>,
+    ) -> &'a mut Shared<Self::Type, super::RW>;
+    fn _use_w<'a, P>(self, cx: &dioxus_core::Scope<'a, P>) -> &'a mut Shared<Self::Type, super::W>;
 }
 
 /// A hook to a shared_value.
@@ -191,7 +202,7 @@ pub trait Static {
 /// calling [`ListEntry::use_rw`](`crate::list::ListEntry::use_rw`) or
 /// [`ListEntry::use_w`](`crate::list::ListEntry::use_w`).
 pub struct Shared<T: 'static, B: 'static> {
-    link: Arc<Link<T>>,
+    pub(crate) link: Arc<Link<T>>,
     pub id: Option<usize>,
     __: std::marker::PhantomData<B>,
 }
@@ -214,12 +225,12 @@ impl<T: 'static, B: 'static + super::Flag> Shared<T, B> {
     ///
     /// NOTE: this method should generally not be used directly; instead, shared values are usually
     /// created with [`shareable!`].
-    pub fn init<P, F: FnOnce() -> T>(
-        cx: &dioxus_core::Scope<P>,
+    pub fn init<'a, P, F: FnOnce() -> T>(
+        cx: &dioxus_core::Scope<'a, P>,
         opt: &mut Shareable<T>,
         f: F,
         _: B,
-    ) -> Self {
+    ) -> &'a mut Self {
         let id = cx.scope_id().0;
         cx.use_hook(|_| {
             let mut r: Shared<T, super::W> = Shared::from_shareable(opt, f);
@@ -229,7 +240,6 @@ impl<T: 'static, B: 'static + super::Flag> Shared<T, B> {
             }
             unsafe { std::mem::transmute::<_, Self>(r) }
         })
-        .clone()
     }
     /// Obtain a write pointer to the shared value and register the change.
     ///
