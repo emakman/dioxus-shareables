@@ -4,10 +4,6 @@
 //! [`sharable!`](crate::shareable) macro:
 //!
 //! ```rust
-//! # #[cfg(feature = "dioxus-git")]
-//! # extern crate dioxus_git as dioxus;
-//! # #[cfg(not(feature = "dioxus-git"))]
-//! # extern crate dioxus_0_2_4 as dioxus;
 //! # use dioxus::prelude::*;
 //! use dioxus_shareables::shareable;
 //!
@@ -120,10 +116,6 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Shareable<T> {
 ///
 /// _Example:_
 /// ```
-/// # #[cfg(feature = "dioxus-git")]
-/// # extern crate dioxus_git as dioxus;
-/// # #[cfg(not(feature = "dioxus-git"))]
-/// # extern crate dioxus_0_2_4 as dioxus;
 /// # use dioxus::prelude::*;
 /// dioxus_shareables::shareable!(#[doc(hidden)] Var: usize = 900); // Declares a type Var which can be used to
 ///                                                                 // access the global.

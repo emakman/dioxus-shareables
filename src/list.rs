@@ -11,10 +11,6 @@ use std::sync::Arc;
 /// to get updated only when the specific list items they use are changed.
 ///
 /// ```rust
-/// # #[cfg(feature = "dioxus-git")]
-/// # extern crate dioxus_git as dioxus;
-/// # #[cfg(not(feature = "dioxus-git"))]
-/// # extern crate dioxus_0_2_4 as dioxus;
 /// # use dioxus::prelude::*;
 /// use dioxus_shareables::{shareable, List, ListEntry};
 ///

@@ -7,12 +7,18 @@
 //! The primary interfaces for the crate are [`Shared`], [`shareable_struct`] and [`List`]
 //!
 //! `dioxus` is still under development; if you're using the latest nightly version of `dioxus`
-//! then enable the `dioxus-git` feature to make `dioxus-shareables` compatible (as of 24 Sep 2022).
-
-#[cfg(not(feature = "dioxus-git"))]
-extern crate dioxus_core_0_2_1 as dioxus_core;
-#[cfg(feature = "dioxus-git")]
-extern crate dioxus_core_git as dioxus_core;
+//! then your `Cargo.toml` should look something like this:
+//! ```Cargo.toml
+//! ...
+//! [dependencies]
+//! ...
+//! dioxus-shareables = { version = "0.2.4", features = "dixous-git" }
+//! ...
+//! [replace]
+//! "dioxus-core:0.2.1" = { git = 'https://github.com/dioxuslabs/dioxus' }
+//! "dioxus-hooks:0.2.1" = { git = 'https://github.com/dioxuslabs/dioxus' }
+//!
+//! ```
 
 pub mod shared;
 pub use shared::Shared;

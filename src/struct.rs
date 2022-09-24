@@ -156,10 +156,6 @@ pub const fn seg_str(s: &'static str, r: usize) -> u128 {
 /// struct. When we use the struct, we then have to declare which actions we need:
 ///
 /// ```
-///     # #[cfg(feature = "dioxus-git")]
-///     # extern crate dioxus_git as dioxus;
-///     # #[cfg(not(feature = "dioxus-git"))]
-///     # extern crate dioxus_0_2_4 as dioxus;
 ///     # use dioxus::prelude::*;
 ///     # dioxus_shareables::shareable_struct! {
 ///     #     pub struct GlobalState {
@@ -191,10 +187,6 @@ pub const fn seg_str(s: &'static str, r: usize) -> u128 {
 /// Of course, there's not a lot of point to grouping shared variables into a type if we don't
 /// implement some methods on the type. This is where the types on the actions come in:
 /// ```
-///     # #[cfg(feature = "dioxus-git")]
-///     # extern crate dioxus_git as dioxus;
-///     # #[cfg(not(feature = "dioxus-git"))]
-///     # extern crate dioxus_0_2_4 as dioxus;
 ///     # use dioxus::prelude::*;
 ///     # dioxus_shareables::shareable_struct! {
 ///     #     pub struct GlobalState {
@@ -247,10 +239,6 @@ pub const fn seg_str(s: &'static str, r: usize) -> u128 {
 /// You don't need to declare actions in advance to use them; in particular, you may want to use
 /// one-off action declarations on method declarations:
 /// ```
-///     # #[cfg(feature = "dioxus-git")]
-///     # extern crate dioxus_git as dioxus;
-///     # #[cfg(not(feature = "dioxus-git"))]
-///     # extern crate dioxus_0_2_4 as dioxus;
 ///     # use dioxus::prelude::*;
 ///     # dioxus_shareables::shareable_struct! {
 ///     #     pub struct GlobalState {
@@ -290,10 +278,6 @@ pub const fn seg_str(s: &'static str, r: usize) -> u128 {
 /// If you'd like, you can also organize your shared structure into substructures. A substructure
 /// can be included in a larger shared structure by preceding the field name with a pipe like so:
 /// ```
-///     # #[cfg(feature = "dioxus-git")]
-///     # extern crate dioxus_git as dioxus;
-///     # #[cfg(not(feature = "dioxus-git"))]
-///     # extern crate dioxus_0_2_4 as dioxus;
 ///     # use dioxus::prelude::*;
 ///     # dioxus_shareables::shareable_struct! {
 ///     #     pub struct GlobalState {
