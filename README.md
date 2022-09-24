@@ -1,6 +1,6 @@
 # Dioxus Shareables
 
-`dioxus-shareables` adds hooks for sharing structures between `dioxus` components. Version 1.0.x provides three interfaces:
+`dioxus-shareables` adds hooks for sharing structures between `dioxus` components. Version 0.2.x provides three interfaces:
 
 1. The `shareable!()` macro creates a single shared value.
 
@@ -90,3 +90,6 @@
          cx.render(rsx!{div{}})
     }
     ```
+
+## A note on version numbers.
+If you're looking at the versions on Crates.io, you might notice that there the first release was a version 1.0. The simple version of the story is that I'm new to sharing my code with others and did *not* think about semver. Since then I've yanked all the release versions to sync the version numbers on this crate with the latest dioxus prerelease version.

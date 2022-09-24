@@ -156,6 +156,10 @@ pub const fn seg_str(s: &'static str, r: usize) -> u128 {
 /// struct. When we use the struct, we then have to declare which actions we need:
 ///
 /// ```
+///     # #[cfg(feature = "dioxus-git")]
+///     # extern crate dioxus_git as dioxus;
+///     # #[cfg(not(feature = "dioxus-git"))]
+///     # extern crate dioxus_0_2_4 as dioxus;
 ///     # use dioxus::prelude::*;
 ///     # dioxus_shareables::shareable_struct! {
 ///     #     pub struct GlobalState {
@@ -187,6 +191,10 @@ pub const fn seg_str(s: &'static str, r: usize) -> u128 {
 /// Of course, there's not a lot of point to grouping shared variables into a type if we don't
 /// implement some methods on the type. This is where the types on the actions come in:
 /// ```
+///     # #[cfg(feature = "dioxus-git")]
+///     # extern crate dioxus_git as dioxus;
+///     # #[cfg(not(feature = "dioxus-git"))]
+///     # extern crate dioxus_0_2_4 as dioxus;
 ///     # use dioxus::prelude::*;
 ///     # dioxus_shareables::shareable_struct! {
 ///     #     pub struct GlobalState {
@@ -239,6 +247,10 @@ pub const fn seg_str(s: &'static str, r: usize) -> u128 {
 /// You don't need to declare actions in advance to use them; in particular, you may want to use
 /// one-off action declarations on method declarations:
 /// ```
+///     # #[cfg(feature = "dioxus-git")]
+///     # extern crate dioxus_git as dioxus;
+///     # #[cfg(not(feature = "dioxus-git"))]
+///     # extern crate dioxus_0_2_4 as dioxus;
 ///     # use dioxus::prelude::*;
 ///     # dioxus_shareables::shareable_struct! {
 ///     #     pub struct GlobalState {
@@ -278,6 +290,10 @@ pub const fn seg_str(s: &'static str, r: usize) -> u128 {
 /// If you'd like, you can also organize your shared structure into substructures. A substructure
 /// can be included in a larger shared structure by preceding the field name with a pipe like so:
 /// ```
+///     # #[cfg(feature = "dioxus-git")]
+///     # extern crate dioxus_git as dioxus;
+///     # #[cfg(not(feature = "dioxus-git"))]
+///     # extern crate dioxus_0_2_4 as dioxus;
 ///     # use dioxus::prelude::*;
 ///     # dioxus_shareables::shareable_struct! {
 ///     #     pub struct GlobalState {
@@ -336,7 +352,7 @@ macro_rules! shareable_struct {
             remaining_actions: {$($actions)*}
             vis: [$v]
             struct: [$Struct]
-            meta: [$(#[$meta:meta])*]
+            meta: [$(#[$meta])*]
             fields: {$($fields)*}
             parsed_actions: []
         }
@@ -685,7 +701,7 @@ macro_rules! shareable_struct_main {
                     )*
                 }
                 $v fn use_<'a, P>(cx: &$crate::reexported::Scope<'a, P>, _: __Actions) -> &'a mut Self {
-                    cx.use_hook(|_| {
+                    $crate::_use_hook!(cx, {
                         let mut self_ = unsafe { Self::__uninit() };
                         self_.__init_in(cx);
                         self_
@@ -747,6 +763,9 @@ macro_rules! shareable_struct_main {
             const _: () = {
                 $v struct [<$Struct FieldData>];
                 $v struct [<$Struct ActionData>];
+                #[derive(Clone, Copy)]
+                $v struct InitAs<F, A>(F, A);
+
                 impl<__Actions: [<$Struct Actions>]> $crate::r#struct::ShareableStruct for $Struct<__Actions> {
                     type Fields = [<$Struct FieldData>];
                     type Actions = [<$Struct ActionData>];
@@ -759,6 +778,7 @@ macro_rules! shareable_struct_main {
                         const W: Self::WType = InitAs([<$Struct FieldShareable $f:camel>], $crate::W);
                         const RW: Self::RWType = InitAs([<$Struct FieldShareable $f:camel>], $crate::RW);
                     }
+                    impl $crate::r#struct::WriteActions for InitAs<[<$Struct FieldShareable $f:camel>], $crate::W> {}
                 )*
                 $(
                     #[derive(Clone, Copy)]
@@ -766,7 +786,7 @@ macro_rules! shareable_struct_main {
                 )*
 
                 impl [<$Struct FieldData>] {
-                    $(const [<$f:snake:upper>]: [<$Struct FieldShareable $f:camel>] = [<$Struct FieldShareable $f:camel>];)*
+                    $($fvis const [<$f:snake:upper>]: [<$Struct FieldShareable $f:camel>] = [<$Struct FieldShareable $f:camel>];)*
                 }
                 impl [<$Struct ActionData>] {
                     $(const $ACTION:
@@ -781,9 +801,6 @@ macro_rules! shareable_struct_main {
                         );
                     )*
                 }
-
-                #[derive(Clone, Copy)]
-                $v struct InitAs<F, A>(F, A);
                 $crate::shareable_struct_init_as_fields!{
                     remaining_fields: [$($f)*]
                     struct: [$Struct]
@@ -978,18 +995,18 @@ macro_rules! struct_assoc_type {
 /// corresponding expression.
 #[macro_export]
 macro_rules! struct_actions {
-    ($Struct:ident<{$($ty:tt)*}>) => {
+    ($Struct:ident$(::$Struct_:ident)*<{$($ty:tt)*}>) => {
         $crate::struct_actions_! {
             unparsed: [$($ty)*]
             produce: ty
-            struct: [$Struct]
+            struct: [$Struct$(::$Struct_)*]
         }
     };
-    ($Struct:ident($($ty:tt)*)) => {
+    ($Struct:ident$(::$Struct_:ident)*($($ty:tt)*)) => {
         $crate::struct_actions_! {
             unparsed: [$($ty)*]
             produce: expr
-            struct: [$Struct]
+            struct: [$Struct$(::$Struct_)*]
         }
     };
 }
@@ -999,14 +1016,14 @@ macro_rules! struct_actions_ {
     (
         unparsed: []
         produce: $t:tt
-        struct: [$Struct:ident]
+        struct: [$Struct:path]
     ) => {
         ()
     };
     (
         unparsed: [W[$($w:ident)*]$($r:tt)*]
         produce: ty
-        struct: [$Struct:ident]
+        struct: [$($Struct:tt)*]
     ) => {
         (
             ($(
@@ -1015,14 +1032,14 @@ macro_rules! struct_actions_ {
             $crate::struct_actions_! {
                 unparsed: [$($r)*]
                 produce: ty
-                struct: [$Struct]
+                struct: [$($Struct)*]
             }
         )
     };
     (
         unparsed: [RW[$($w:ident)*]$($r:tt)*]
         produce: ty
-        struct: [$Struct:ident]
+        struct: [$($Struct:tt)*]
     ) => {
         (
             ($(
@@ -1031,14 +1048,14 @@ macro_rules! struct_actions_ {
             $crate::struct_actions_! {
                 unparsed: [$($r)*]
                 produce: ty
-                struct: [$Struct]
+                struct: [$($Struct)*]
             }
         )
     };
     (
         unparsed: [W[$($w:ident)*]$($r:tt)*]
         produce: expr
-        struct: [$Struct:ident]
+        struct: [$($Struct:tt)*]
     ) => {
         (
             ($(
@@ -1047,14 +1064,14 @@ macro_rules! struct_actions_ {
             $crate::struct_actions_! {
                 unparsed: [$($r)*]
                 produce: expr
-                struct: [$Struct]
+                struct: [$($Struct)*]
             }
         )
     };
     (
         unparsed: [RW[$($w:ident)*]$($r:tt)*]
         produce: expr
-        struct: [$Struct:ident]
+        struct: [$($Struct:tt)*]
     ) => {
         (
             ($(
@@ -1063,7 +1080,7 @@ macro_rules! struct_actions_ {
             $crate::struct_actions_! {
                 unparsed: [$($r)*]
                 produce: expr
-                struct: [$Struct]
+                struct: [$($Struct)*]
             }
         )
     };

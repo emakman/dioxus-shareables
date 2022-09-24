@@ -11,6 +11,10 @@ use std::sync::Arc;
 /// to get updated only when the specific list items they use are changed.
 ///
 /// ```rust
+/// # #[cfg(feature = "dioxus-git")]
+/// # extern crate dioxus_git as dioxus;
+/// # #[cfg(not(feature = "dioxus-git"))]
+/// # extern crate dioxus_0_2_4 as dioxus;
 /// # use dioxus::prelude::*;
 /// use dioxus_shareables::{shareable, List, ListEntry};
 ///
@@ -407,7 +411,7 @@ impl<T> ListEntry<T> {
     /// parent component. If you need to access an entry in the component which owns the list it
     /// belongs to, then you generally need to use [`share`](Self::share) instead.
     pub fn use_w<'a, P>(&self, cx: &dioxus_core::Scope<'a, P>) -> &'a mut Shared<T, super::W> {
-        let mut opt = Shareable(Some(Arc::downgrade(&self.0)));
+        let mut opt = Shareable(Some(self.0.clone()));
         Shared::init(cx, &mut opt, || unreachable!(), super::W)
     }
     /// Get a read-write pointer to the element.
@@ -418,7 +422,7 @@ impl<T> ListEntry<T> {
     /// parent component. If you need to access an entry in the component which owns the list it
     /// belongs to, then you generally need to use [`share`](Self::share) instead.
     pub fn use_rw<'a, P>(&self, cx: &dioxus_core::Scope<'a, P>) -> &'a mut Shared<T, super::RW> {
-        let mut opt = Shareable(Some(Arc::downgrade(&self.0)));
+        let mut opt = Shareable(Some(self.0.clone()));
         Shared::init(cx, &mut opt, || unreachable!(), super::RW)
     }
 }

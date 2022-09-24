@@ -1,7 +1,7 @@
 [package]
 name = "dioxus-shareables"
-author = "Tamvana Makuluni"
-version = "2.0.0"
+authors = ["Tamvana Makuluni"]
+version = "0.2.4"
 edition = "2021"
 license = "MIT"
 description = "Hooks for sharing structures between components."
@@ -12,11 +12,15 @@ keywords = ["dioxus"]
 include = ["src/**/*.rs", "Cargo.toml", "LICENSE"]
 
 [features]
-debugging = []
+default = [ "dioxus-core-0-2-1" ]
+debug = []
+dioxus-git = [ "dioxus-core-git" ]
 
 [dependencies]
-dioxus-core = "0.2.1"
+dioxus-core-0-2-1 = { package = "dioxus-core", version = "0.2.1", optional = true }
+dioxus-core-git = { package = "dioxus-core", git = "https://github.com/dioxuslabs/dioxus", optional = true }
 paste = "1"
 
 [dev-dependencies]
-dioxus = "0.2.4"
+dioxus-0-2-4 = { package = "dioxus", version = "0.2.4" }
+dioxus-git = { package = "dioxus", git = "https://github.com/dioxuslabs/dioxus" }

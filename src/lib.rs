@@ -3,6 +3,17 @@
 //! This crate provides abstractions for global resource sharing in
 //! [`dioxus`](https://docs.rs/dioxus) similar to `fermi`, but with a slightly different data
 //! model, and some extensions for shared structures.
+//!
+//! The primary interfaces for the crate are [`Shared`], [`shareable_struct`] and [`List`]
+//!
+//! `dioxus` is still under development; if you're using the latest nightly version of `dioxus`
+//! then enable the `dioxus-git` feature to make `dioxus-shareables` compatible (as of 24 Sep 2022).
+
+#[cfg(not(feature = "dioxus-git"))]
+extern crate dioxus_core_0_2_1 as dioxus_core;
+#[cfg(feature = "dioxus-git")]
+extern crate dioxus_core_git as dioxus_core;
+
 pub mod shared;
 pub use shared::Shared;
 
@@ -17,9 +28,6 @@ pub mod reexported {
     pub use dioxus_core::Scope;
     pub use paste::paste;
 }
-
-#[cfg(feature = "debugging")]
-pub static mut LOG: fn(usize, &str) = |_component, _msg| {};
 
 #[doc(hidden)]
 mod sealed {
