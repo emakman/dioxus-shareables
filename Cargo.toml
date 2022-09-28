@@ -16,8 +16,9 @@ debug = []
 dioxus-git = []
 
 [dependencies]
-dioxus-core = { package = "dioxus-core", version = "0.2.1" }
+dioxus-core = "0.2.1"
+parking_lot = "0.12.1"
 paste = "1"
 
 [dev-dependencies]
-dioxus = { package = "dioxus", version = "0.2.4" }
+dioxus = "0.2.4"
