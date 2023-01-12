@@ -41,8 +41,9 @@ use std::{
     sync::Arc,
 };
 
+type LinkUpdateMap = HashMap<usize, (usize, Arc<dyn Fn()>)>;
 /// The actual shared data.
-pub(crate) struct Link<T>(RefCell<(T, HashMap<usize, (usize, Arc<dyn Fn()>)>)>);
+pub(crate) struct Link<T>(RefCell<(T, LinkUpdateMap)>);
 impl<T> Link<T> {
     pub(crate) fn new(t: T) -> Self {
         Self(RefCell::new((t, HashMap::new())))
@@ -155,7 +156,7 @@ macro_rules! shareable {
             /// Get a pointer to the value, but don't call 'use_hook'.
             ///
             /// This is generally to be avoided in components, but should be used when the shared
-            /// must be initialized within a loop, or within the initializer of another hook.
+            /// value must be initialized within a loop, or within the initializer of another hook.
             ///
             /// If you don't know why you should be using it, use either [`use_rw`](Self::use_rw)
             /// or [`use_w`](Self::use_w) instead.
@@ -249,6 +250,7 @@ impl<T: 'static, B: 'static + super::Flag> Shared<T, B> {
                 r.id = Some(id);
                 r.link.add_listener(id, || cx.schedule_update());
             }
+            // SAFETY: Transmuting between Shared<T, A> and Shared<T, B> is safe because the layout of Shared<T, F> does not depend on F.
             unsafe { std::mem::transmute::<_, Self>(r) }
         }
     }
@@ -300,7 +302,7 @@ impl<T: 'static, B: 'static + super::Flag> Shared<T, B> {
     pub fn read(&self) -> Ref<T> {
         self.link.borrow()
     }
-    pub fn listeners<'a>(&'a self) -> String {
+    pub fn listeners(&self) -> String {
         format!(
             "{:?}",
             self.link

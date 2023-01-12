@@ -50,23 +50,23 @@ mod sealed {
     }
     macro_rules! impl_InductiveMarkerTuple_for {
         () => {};
-        ($T:ident$(,$U:ident$({$ct:tt})?)*) => {
-            impl<$T: Copy$(,$U: Copy)*> InductiveMarkerTuple for ($($U,)*$T,) {
-                type __Base = ($($U,)*);
+        ($T:ident$($(,$U:ident$({$ct:tt})?)+)?) => {
+            impl<$T: Copy$($(,$U: Copy)+)?> InductiveMarkerTuple for ($($($U,)+)?$T,) {
+                type __Base = ($($($U,)+)?);
                 type __Step = $T;
                 type __Decons = super::Decons<Self::__Base, Self::__Step>;
                 fn __base(&self) -> Self::__Base {
                     paste::paste! {
-                        let ($([<__ $U:lower>],)*_,) = *self;
-                        ($([<__ $U:lower>],)*)
+                        let ($($([<__ $U:lower>],)+)?_,) = *self;
+                        $(($([<__ $U:lower>],)+))?
                     }
                 }
                 fn __step(&self) -> Self::__Step {
-                    let ($(_ $($ct)?,)*r,) = *self;
+                    let ($($(_ $($ct)?,)+)?r,) = *self;
                     r
                 }
             }
-            impl_InductiveMarkerTuple_for! ($($U),*);
+            impl_InductiveMarkerTuple_for! ($($($U),+)?);
         }
     }
     impl_InductiveMarkerTuple_for!(
@@ -178,6 +178,8 @@ impl sealed::InitType for RW {
             let mut r = s._share();
             r.id = Some(id);
             r.link.add_listener(id, || cx.schedule_update());
+            // SAFETY:
+            //   * Shared<T, W> and Shared<T, RW> are layed out identically in memory.
             *f = Some(unsafe { std::mem::transmute(r) });
         }
     }

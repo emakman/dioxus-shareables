@@ -62,6 +62,9 @@ use std::sync::Arc;
 ///
 pub struct List<T>(Vec<ListEntry<T>>);
 
+#[allow(non_camel_case_types)]
+pub type share_entry_w<T> = fn(ListEntry<T>) -> Shared<T, super::W>;
+pub type Drain<'a, T> = std::iter::Map<std::vec::Drain<'a, ListEntry<T>>, share_entry_w<T>>;
 impl<T> List<T> {
     /// See [`Vec::append`]
     pub fn append(&mut self, o: &mut Self) {
@@ -91,10 +94,7 @@ impl<T> List<T> {
         self.0.dedup_by(|r, s| f(&r.0.borrow()) == f(&s.0.borrow()))
     }
     /// See [`Vec::drain`]
-    pub fn drain<'a, R: std::ops::RangeBounds<usize>>(
-        &'a mut self,
-        range: R,
-    ) -> std::iter::Map<std::vec::Drain<'a, ListEntry<T>>, fn(ListEntry<T>) -> Shared<T, super::W>>
+    pub fn drain<R: std::ops::RangeBounds<usize>>(&mut self, range: R) -> Drain<T>
     where
         T: 'static,
     {
@@ -273,11 +273,14 @@ impl<T> List<T> {
         self.0.get(index).cloned()
     }
     /// See [`[_]::get_unchecked`]
+    ///
+    /// # Safety
+    ///   * The index must be in bounds for the slice, otherwise this method is u.b.
     pub unsafe fn get_unchecked(&self, index: usize) -> ListEntry<T> {
         self.0.get_unchecked(index).clone()
     }
     /// See [`[_]::iter`]
-    pub fn iter<'a>(&'a self) -> <&'a Self as IntoIterator>::IntoIter {
+    pub fn iter(&self) -> <&Self as IntoIterator>::IntoIter {
         self.into_iter()
     }
     /// See [`[_]::last`]
@@ -346,6 +349,11 @@ impl<T> List<T> {
     /// See [`[_]::swap`]
     pub fn swap(&mut self, a: usize, b: usize) {
         self.0.swap(a, b)
+    }
+}
+impl<T> Default for List<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 impl<'a, T> IntoIterator for &'a List<T> {

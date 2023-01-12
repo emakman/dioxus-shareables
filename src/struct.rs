@@ -120,13 +120,13 @@ pub trait AssocType<
     type Type;
 }
 pub const fn seg_str(s: &'static str, r: usize) -> u128 {
-    let mut i = 0;
+    let mut i = 0usize;
     let mut c = 0;
     loop {
         if i >= 16 || r + i >= s.len() {
             return c;
         }
-        c += (s.as_bytes()[r + i] as u128) << 8 * (i as usize);
+        c += (s.as_bytes()[r + i] as u128) << (8 * i);
         i += 1;
     }
 }
