@@ -35,18 +35,18 @@
 //! }
 //! ```
 
+use rustc_hash::FxHashMap;
 use std::{
     cell::{Ref, RefCell, RefMut},
-    collections::HashMap,
     sync::Arc,
 };
 
-type LinkUpdateMap = HashMap<usize, (usize, Arc<dyn Fn()>)>;
+type LinkUpdateMap = FxHashMap<usize, (usize, Arc<dyn Fn()>)>;
 /// The actual shared data.
 pub(crate) struct Link<T>(RefCell<(T, LinkUpdateMap)>);
 impl<T> Link<T> {
     pub(crate) fn new(t: T) -> Self {
-        Self(RefCell::new((t, HashMap::new())))
+        Self(RefCell::new((t, FxHashMap::default())))
     }
     pub(crate) fn add_listener<F: FnOnce() -> Arc<dyn Fn()>>(&self, id: usize, f: F) {
         self.0
