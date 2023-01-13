@@ -40,14 +40,15 @@
 use parking_lot::{
     MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock, RwLockReadGuard, RwLockWriteGuard,
 };
-use std::{collections::HashMap, sync::Arc};
+use rustc_hash::FxHashMap;
+use std::sync::Arc;
 
-type LinkUpdateMap = HashMap<usize, (usize, Arc<dyn Send + Sync + Fn()>)>;
+type LinkUpdateMap = FxHashMap<usize, (usize, Arc<dyn Send + Sync + Fn()>)>;
 /// The actual shared data.
 pub(crate) struct Link<T>(RwLock<(T, LinkUpdateMap)>);
 impl<T> Link<T> {
     pub(crate) fn new(t: T) -> Self {
-        Self(RwLock::new((t, HashMap::new())))
+        Self(RwLock::new((t, FxHashMap::default())))
     }
     pub(crate) fn add_listener<F: FnOnce() -> Arc<dyn Send + Sync + Fn()>>(&self, id: usize, f: F) {
         self.0.write().1.entry(id).or_insert_with(|| (0, f())).0 += 1;
