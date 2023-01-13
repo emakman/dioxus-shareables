@@ -12,7 +12,7 @@
 //! ...
 //! [dependencies]
 //! ...
-//! dioxus-shareables = { version = "0.2.4", features = ["dixous-git"] }
+//! dioxus-shareables = { version = "0.2.7", features = ["dixous-git"] }
 //! ...
 //! [replace]
 //! "dioxus-core:0.2.1" = { git = 'https://github.com/dioxuslabs/dioxus' }
@@ -32,6 +32,7 @@ pub mod r#struct;
 #[doc(hidden)]
 pub mod reexported {
     pub use dioxus_core::Scope;
+    pub use parking_lot::Mutex;
     pub use paste::paste;
 }
 
