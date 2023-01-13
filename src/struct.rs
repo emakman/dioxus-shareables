@@ -152,6 +152,8 @@ pub const fn seg_str(s: &'static str, r: usize) -> u128 {
 ///         action D_ACTION impl pub D = W[c]; // Action D_ACTION with equivalent trait D.
 ///     }
 /// ```
+/// NOTE: fields in the struct must be `Send + Sync`
+///
 /// First we declare the struct itself, then "actions" which represent different views of the
 /// struct. When we use the struct, we then have to declare which actions we need:
 ///
@@ -664,7 +666,7 @@ macro_rules! shareable_struct_main {
                     self_
                 }
                 #[doc(hidden)]
-                $v unsafe fn __uninit() -> Self {
+                $v fn __uninit() -> Self {
                     Self {
                         $($f: None,)*
                         $($g: $gT::__uninit(),)*
@@ -686,7 +688,7 @@ macro_rules! shareable_struct_main {
                 }
                 $v fn use_<'a, P>(cx: &$crate::reexported::Scope<'a, P>, _: __Actions) -> &'a mut Self {
                     $crate::_use_hook!(cx, {
-                        let mut self_ = unsafe { Self::__uninit() };
+                        let mut self_ = Self::__uninit();
                         self_.__init_in(cx);
                         self_
                     })
@@ -694,6 +696,10 @@ macro_rules! shareable_struct_main {
                 $v fn with_actions<B: [<$Struct Actions>]>(&self, _: B) -> &$Struct<B>
                 where __Actions: [<As $Struct Actions>]<B>
                 {
+                    // SAFETY:
+                    //   * the layout of $Struct<F> does not depend on F.
+                    //   * the [<As $Struct Actions>] trait guarantees that an initialized $Struct<__Actions>
+                    //     has initialized all the fields that should be initialized in $Struct<B>
                     unsafe { std::mem::transmute(self) }
                 }
                 $($fvis fn $f(&self) -> &$crate::Shared<$fT, <__Actions as [<$Struct Actions>]>::[<$f:camel Flag>]> where <__Actions as [<$Struct Actions>]>::[<$f:camel Flag>]: $crate::Flag {
@@ -735,11 +741,19 @@ macro_rules! shareable_struct_main {
             )*
             impl<A: [<$Struct Actions>], B: [<As $Struct Actions>]<A>> AsRef<$Struct<A>> for $Struct<B> {
                 fn as_ref(&self) -> &$Struct<A> {
+                    // SAFETY:
+                    //   * the layout of $Struct<F> does not depend on F.
+                    //   * the [<As $Struct Actions>] trait guarantees that an initialized $Struct<B>
+                    //     has initialized all the fields that should be initialized in $Struct<A>
                     unsafe { std::mem::transmute(self) }
                 }
             }
             impl<A: [<$Struct Actions>], B: [<As $Struct Actions>]<A>> AsMut<$Struct<A>> for $Struct<B> {
                 fn as_mut(&mut self) -> &mut $Struct<A> {
+                    // SAFETY:
+                    //   * the layout of $Struct<F> does not depend on F.
+                    //   * the [<As $Struct Actions>] trait guarantees that an initialized $Struct<B>
+                    //     has initialized all the fields that should be initialized in $Struct<A>
                     unsafe { std::mem::transmute(self) }
                 }
             }

@@ -3,6 +3,8 @@
 //! The easiest way to add a shared value to your dioxus app is to use the
 //! [`sharable!`](crate::shareable) macro:
 //!
+//! NOTE: The type of the shared data must be `Send + Sync`.
+//!
 //! ```rust
 //! # use dioxus::prelude::*;
 //! use dioxus_shareables::shareable;
@@ -35,29 +37,24 @@
 //! }
 //! ```
 
-use rustc_hash::FxHashMap;
-use std::{
-    cell::{Ref, RefCell, RefMut},
-    sync::Arc,
+use parking_lot::{
+    MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock, RwLockReadGuard, RwLockWriteGuard,
 };
+use rustc_hash::FxHashMap;
+use std::sync::Arc;
 
-type LinkUpdateMap = FxHashMap<usize, (usize, Arc<dyn Fn()>)>;
+type LinkUpdateMap = FxHashMap<usize, (usize, Arc<dyn Send + Sync + Fn()>)>;
 /// The actual shared data.
-pub(crate) struct Link<T>(RefCell<(T, LinkUpdateMap)>);
+pub(crate) struct Link<T>(RwLock<(T, LinkUpdateMap)>);
 impl<T> Link<T> {
     pub(crate) fn new(t: T) -> Self {
-        Self(RefCell::new((t, FxHashMap::default())))
+        Self(RwLock::new((t, FxHashMap::default())))
     }
-    pub(crate) fn add_listener<F: FnOnce() -> Arc<dyn Fn()>>(&self, id: usize, f: F) {
-        self.0
-            .borrow_mut()
-            .1
-            .entry(id)
-            .or_insert_with(|| (0, f()))
-            .0 += 1;
+    pub(crate) fn add_listener<F: FnOnce() -> Arc<dyn Send + Sync + Fn()>>(&self, id: usize, f: F) {
+        self.0.write().1.entry(id).or_insert_with(|| (0, f())).0 += 1;
     }
     pub(crate) fn drop_listener(&self, id: usize) {
-        let mut p = self.0.borrow_mut();
+        let mut p = self.0.write();
         let c = if let Some((c, _)) = p.1.get_mut(&id) {
             *c -= 1;
             *c
@@ -69,15 +66,15 @@ impl<T> Link<T> {
         }
     }
     pub(crate) fn needs_update(&self) {
-        for (_id, (_, u)) in self.0.borrow().1.iter().filter(|&(_, &(ct, _))| ct > 0) {
+        for (_id, (_, u)) in self.0.read().1.iter().filter(|&(_, &(ct, _))| ct > 0) {
             u()
         }
     }
-    pub(crate) fn borrow(&self) -> Ref<T> {
-        Ref::map(self.0.borrow(), |(r, _)| r)
+    pub(crate) fn borrow(&self) -> MappedRwLockReadGuard<T> {
+        RwLockReadGuard::map(self.0.read(), |(r, _)| r)
     }
-    pub(crate) fn borrow_mut(&self) -> RefMut<T> {
-        RefMut::map(self.0.borrow_mut(), |(r, _)| r)
+    pub(crate) fn borrow_mut(&self) -> MappedRwLockWriteGuard<T> {
+        RwLockWriteGuard::map(self.0.write(), |(r, _)| r)
     }
 }
 #[cfg(feature = "debug")]
@@ -165,22 +162,20 @@ macro_rules! shareable {
             }
         }
         const _: () = {
+            // We declare the static as mutable because we are not thread-safe yet.
             #[allow(non_upper_case_globals)]
-            static mut $IDENT: $crate::shared::Shareable<$Ty> = $crate::shared::Shareable::new();
+            static $IDENT: $crate::reexported::Mutex<$crate::shared::Shareable<$Ty>> = $crate::reexported::Mutex::new($crate::shared::Shareable::new());
             #[doc(hidden)]
             impl $crate::shared::Static for $IDENT {
                 type Type = $Ty;
                 fn _share(self) -> $crate::Shared<$Ty, $crate::W> {
-                    $crate::Shared::from_shareable(unsafe { &mut $IDENT }, || {$($init)*})
+                    $crate::Shared::from_shareable(&mut $IDENT.lock(), || {$($init)*})
                 }
                 fn _use_rw<'a, P>(self,cx: &$crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::RW> {
-                    $crate::Shared::init(cx, unsafe { &mut $IDENT }, || {$($init)*}, $crate::RW)
+                    $crate::Shared::init(cx, &mut $IDENT.lock(), || {$($init)*}, $crate::RW)
                 }
                 fn _use_w<'a, P>(self,cx: &$crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::W> {
-                    $crate::Shared::init(cx, unsafe { &mut $IDENT }, || {$($init)*}, $crate::W)
-                }
-                unsafe fn raw(self) -> &'static $crate::shared::Shareable<$Ty> {
-                    &$IDENT
+                    $crate::Shared::init(cx, &mut $IDENT.lock(), || {$($init)*}, $crate::W)
                 }
             }
         };
@@ -196,7 +191,6 @@ pub trait Static {
         cx: &dioxus_core::Scope<'a, P>,
     ) -> &'a mut Shared<Self::Type, super::RW>;
     fn _use_w<'a, P>(self, cx: &dioxus_core::Scope<'a, P>) -> &'a mut Shared<Self::Type, super::W>;
-    unsafe fn raw(self) -> &'static Shareable<Self::Type>;
 }
 
 /// A hook to a shared_value.
@@ -250,21 +244,22 @@ impl<T: 'static, B: 'static + super::Flag> Shared<T, B> {
                 r.id = Some(id);
                 r.link.add_listener(id, || cx.schedule_update());
             }
-            // SAFETY: Transmuting between Shared<T, A> and Shared<T, B> is safe because the layout of Shared<T, F> does not depend on F.
+            // SAFETY: Transmuting between Shared<T, A> and Shared<T, B> is safe
+            // because the layout of Shared<T, F> does not depend on F.
             unsafe { std::mem::transmute::<_, Self>(r) }
         }
     }
     /// Obtain a write pointer to the shared value and register the change.
     ///
     /// This will mark all components which hold a RW link to the value as needing update.
-    pub fn write(&self) -> RefMut<T> {
+    pub fn write(&self) -> MappedRwLockWriteGuard<T> {
         self.link.needs_update();
         self.link.borrow_mut()
     }
     /// Obtain a write pointer to the shared value but do not register the change.
     ///
     /// This will not notify consumers of the change to the value.
-    pub fn write_silent(&self) -> RefMut<T> {
+    pub fn write_silent(&self) -> MappedRwLockWriteGuard<T> {
         self.link.borrow_mut()
     }
     /// Mark the components which hold a RW link to the value as needing update.
@@ -299,7 +294,7 @@ impl<T: 'static, B: 'static + super::Flag> Shared<T, B> {
         }
     }
     /// Get the value of the shared data.
-    pub fn read(&self) -> Ref<T> {
+    pub fn read(&self) -> MappedRwLockReadGuard<T> {
         self.link.borrow()
     }
     pub fn listeners(&self) -> String {
@@ -307,7 +302,7 @@ impl<T: 'static, B: 'static + super::Flag> Shared<T, B> {
             "{:?}",
             self.link
                 .0
-                .borrow()
+                .read()
                 .1
                 .iter()
                 .map(|(&i, &(j, _))| (i, j))
