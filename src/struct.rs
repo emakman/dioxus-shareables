@@ -687,7 +687,7 @@ macro_rules! shareable_struct_main {
                     )*
                 }
                 $v fn use_<'a, P>(cx: &$crate::reexported::Scope<'a, P>, _: __Actions) -> &'a mut Self {
-                    $crate::_use_hook!(cx, {
+                    cx.use_hook(|| {
                         let mut self_ = Self::__uninit();
                         self_.__init_in(cx);
                         self_
