@@ -122,7 +122,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Shareable<T> {
 ///     let rw_hook = Var.use_rw(&cx);
 ///     let w_hook = Var.use_w(&cx);
 ///     // ...
-///     # rsx! {cx, div {}}
+///     # cx.render(rsx! {div {}})
 /// }
 /// ```
 #[macro_export]
@@ -215,14 +215,6 @@ impl<T: 'static, B: 'static> Clone for Shared<T, B> {
         }
     }
 }
-#[cfg(feature = "dioxus-git")]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! _use_hook { ($cx:expr,$($x:tt)*) => { $cx.use_hook(|| {$($x)*}) } }
-#[cfg(not(feature = "dioxus-git"))]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! _use_hook { ($cx:expr,$($x:tt)*) => { $cx.use_hook(|_| {$($x)*}) } }
 
 impl<T: 'static, B: 'static + super::Flag> Shared<T, B> {
     /// Initialize the hook in scope `cx`.
@@ -238,7 +230,7 @@ impl<T: 'static, B: 'static + super::Flag> Shared<T, B> {
         _: B,
     ) -> &'a mut Self {
         let id = cx.scope_id().0;
-        _use_hook! {cx,
+        cx.use_hook(|| {
             let mut r: Shared<T, super::W> = Shared::from_shareable(opt, f);
             if B::READ {
                 r.id = Some(id);
@@ -247,7 +239,7 @@ impl<T: 'static, B: 'static + super::Flag> Shared<T, B> {
             // SAFETY: Transmuting between Shared<T, A> and Shared<T, B> is safe
             // because the layout of Shared<T, F> does not depend on F.
             unsafe { std::mem::transmute::<_, Self>(r) }
-        }
+        })
     }
     /// Obtain a write pointer to the shared value and register the change.
     ///
