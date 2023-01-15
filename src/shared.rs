@@ -162,7 +162,6 @@ macro_rules! shareable {
             }
         }
         const _: () = {
-            // We declare the static as mutable because we are not thread-safe yet.
             #[allow(non_upper_case_globals)]
             static $IDENT: $crate::reexported::Mutex<$crate::shared::Shareable<$Ty>> = $crate::reexported::Mutex::new($crate::shared::Shareable::new());
             #[doc(hidden)]
