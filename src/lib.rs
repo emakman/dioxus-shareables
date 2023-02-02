@@ -26,6 +26,8 @@ pub use shared::Shared;
 pub mod list;
 pub use list::{List, ListEntry};
 
+pub mod arcmap;
+
 #[doc(hidden)]
 pub mod r#struct;
 
@@ -77,24 +79,24 @@ mod sealed {
     );
 
     pub trait InitType: Sized + Copy {
-        fn __init_field<P, T, S: crate::shared::Static<Type = T>>(
+        fn __init_field<P, T: 'static + Send + Sync, S: crate::shared::Static<Type = T>>(
             cx: &dioxus_core::Scope<P>,
             _: &mut Option<crate::shared::Shared<T, Self>>,
             _: S,
         );
-        fn __share_field<T, S: crate::shared::Static<Type = T>>(
+        fn __share_field<T: 'static + Send + Sync, S: crate::shared::Static<Type = T>>(
             _: &mut Option<crate::Shared<T, Self>>,
             _: S,
         );
     }
     impl InitType for () {
-        fn __init_field<P, T, S: crate::shared::Static<Type = T>>(
+        fn __init_field<P, T: 'static + Send + Sync, S: crate::shared::Static<Type = T>>(
             _: &dioxus_core::Scope<P>,
             _: &mut Option<crate::Shared<T, Self>>,
             _: S,
         ) {
         }
-        fn __share_field<T, S: crate::shared::Static<Type = T>>(
+        fn __share_field<T: 'static + Send + Sync, S: crate::shared::Static<Type = T>>(
             _: &mut Option<crate::Shared<T, Self>>,
             _: S,
         ) {
@@ -114,7 +116,7 @@ impl<T: sealed::Flag> Flag for T {}
 /// type (which is used to indicate a field is not initialized.)
 pub trait InitType: sealed::InitType {
     #[doc(hidden)]
-    fn init_field<P, T, S: shared::Static<Type = T>>(
+    fn init_field<P, T: 'static + Send + Sync, S: shared::Static<Type = T>>(
         cx: &dioxus_core::Scope<P>,
         f: &mut Option<Shared<T, Self>>,
         s: S,
@@ -122,7 +124,7 @@ pub trait InitType: sealed::InitType {
         Self::__init_field(cx, f, s)
     }
     #[doc(hidden)]
-    fn share_field<T, S: crate::shared::Static<Type = T>>(
+    fn share_field<T: 'static + Send + Sync, S: crate::shared::Static<Type = T>>(
         f: &mut Option<crate::Shared<T, Self>>,
         s: S,
     ) {
@@ -140,7 +142,7 @@ impl sealed::Flag for W {
     const READ: bool = false;
 }
 impl sealed::InitType for W {
-    fn __init_field<P, T, S: shared::Static<Type = T>>(
+    fn __init_field<P, T: 'static + Send + Sync, S: shared::Static<Type = T>>(
         _: &dioxus_core::Scope<P>,
         f: &mut Option<Shared<T, Self>>,
         s: S,
@@ -149,7 +151,7 @@ impl sealed::InitType for W {
             *f = Some(s._share());
         }
     }
-    fn __share_field<T, S: crate::shared::Static<Type = T>>(
+    fn __share_field<T: 'static + Send + Sync, S: crate::shared::Static<Type = T>>(
         f: &mut Option<crate::Shared<T, Self>>,
         s: S,
     ) {
@@ -169,7 +171,7 @@ impl sealed::Flag for RW {
     const READ: bool = true;
 }
 impl sealed::InitType for RW {
-    fn __init_field<P, T, S: shared::Static<Type = T>>(
+    fn __init_field<P, T: 'static + Send + Sync, S: shared::Static<Type = T>>(
         cx: &dioxus_core::Scope<P>,
         f: &mut Option<Shared<T, Self>>,
         s: S,
@@ -184,7 +186,7 @@ impl sealed::InitType for RW {
             *f = Some(unsafe { std::mem::transmute(r) });
         }
     }
-    fn __share_field<T, S: crate::shared::Static<Type = T>>(
+    fn __share_field<T: 'static + Send + Sync, S: crate::shared::Static<Type = T>>(
         _: &mut Option<crate::Shared<T, Self>>,
         _: S,
     ) {

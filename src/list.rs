@@ -2,9 +2,8 @@
 //!
 //! See [`List`] for more info.
 
+use crate::arcmap::ArcMap;
 use crate::shared::{Link, Shareable, Shared};
-use std::sync::Arc;
-
 /// A list of shareable values.
 ///
 /// Using a `List<T>` rather than a `Vec<T>` allows components which use only one or two list items
@@ -60,12 +59,12 @@ use std::sync::Arc;
 /// `List` is a [`Vec`] internally, and the methods it implements therefore get their names and
 /// behavior from [`Vec`].
 ///
-pub struct List<T>(Vec<ListEntry<T>>);
+pub struct List<T: 'static + Send + Sync>(Vec<ListEntry<T>>);
 
 #[allow(non_camel_case_types)]
 pub type share_entry_w<T> = fn(ListEntry<T>) -> Shared<T, super::W>;
 pub type Drain<'a, T> = std::iter::Map<std::vec::Drain<'a, ListEntry<T>>, share_entry_w<T>>;
-impl<T> List<T> {
+impl<T: 'static + Send + Sync> List<T> {
     /// See [`Vec::append`]
     pub fn append(&mut self, o: &mut Self) {
         self.0.append(&mut o.0)
@@ -351,29 +350,29 @@ impl<T> List<T> {
         self.0.swap(a, b)
     }
 }
-impl<T> Default for List<T> {
+impl<T: 'static + Send + Sync> Default for List<T> {
     fn default() -> Self {
         Self::new()
     }
 }
-impl<'a, T> IntoIterator for &'a List<T> {
+impl<'a, T: 'static + Send + Sync> IntoIterator for &'a List<T> {
     type Item = ListEntry<T>;
     type IntoIter = std::iter::Cloned<std::slice::Iter<'a, ListEntry<T>>>;
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter().cloned()
     }
 }
-impl<T> FromIterator<T> for List<T> {
+impl<T: 'static + Send + Sync> FromIterator<T> for List<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         Self(iter.into_iter().map(ListEntry::new).collect())
     }
 }
-impl<T> Extend<T> for List<T> {
+impl<T: 'static + Send + Sync> Extend<T> for List<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         self.0.extend(iter.into_iter().map(ListEntry::new))
     }
 }
-impl<'a, T: 'a + Clone> Extend<&'a T> for List<T> {
+impl<'a, T: 'static + Send + Sync + Clone> Extend<&'a T> for List<T> {
     fn extend<I: IntoIterator<Item = &'a T>>(&mut self, iter: I) {
         self.0.extend(iter.into_iter().cloned().map(ListEntry::new))
     }
@@ -386,20 +385,20 @@ impl<'a, T: 'a + Clone> Extend<&'a T> for List<T> {
 ///
 /// `ListEntry` implements [`PartialEq`] _AS A POINTER ONLY_. This is so that the properties of a
 /// component depend only on which list entry is referenced, and not on the value.
-pub struct ListEntry<T>(Arc<Link<T>>);
-impl<T> PartialEq for ListEntry<T> {
+pub struct ListEntry<T: 'static + Send + Sync>(ArcMap<Link<T>>);
+impl<T: 'static + Send + Sync> PartialEq for ListEntry<T> {
     fn eq(&self, o: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &o.0)
+        ArcMap::ptr_eq(&self.0, &o.0)
     }
 }
-impl<T> Clone for ListEntry<T> {
+impl<T: 'static + Send + Sync> Clone for ListEntry<T> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
-impl<T> ListEntry<T> {
+impl<T: 'static + Send + Sync> ListEntry<T> {
     fn new(t: T) -> Self {
-        ListEntry(Arc::new(Link::new(t)))
+        ListEntry(ArcMap::new(Link::new(t)))
     }
     /// Get a write-only pointer to the element.
     ///

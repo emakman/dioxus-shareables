@@ -37,6 +37,7 @@
 //! }
 //! ```
 
+use crate::arcmap::ArcMap;
 use parking_lot::{
     MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock, RwLockReadGuard, RwLockWriteGuard,
 };
@@ -45,8 +46,8 @@ use std::sync::Arc;
 
 type LinkUpdateMap = FxHashMap<usize, (usize, Arc<dyn Send + Sync + Fn()>)>;
 /// The actual shared data.
-pub(crate) struct Link<T>(RwLock<(T, LinkUpdateMap)>);
-impl<T> Link<T> {
+pub(crate) struct Link<T: 'static + Send + Sync>(RwLock<(T, LinkUpdateMap)>);
+impl<T: 'static + Send + Sync> Link<T> {
     pub(crate) fn new(t: T) -> Self {
         Self(RwLock::new((t, FxHashMap::default())))
     }
@@ -93,8 +94,8 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Link<T> {
 /// This is generally not used directly, but it is the type of a static declared with the
 /// [`shareable!`](`crate::shareable`) macro, and can be used to construct more complicated shared
 /// types.
-pub struct Shareable<T>(pub(crate) Option<Arc<Link<T>>>);
-impl<T> Shareable<T> {
+pub struct Shareable<T: 'static + Send + Sync>(pub(crate) Option<ArcMap<Link<T>>>);
+impl<T: 'static + Send + Sync> Shareable<T> {
     pub const fn new() -> Self {
         Self(None)
     }
@@ -183,7 +184,7 @@ macro_rules! shareable {
 
 #[doc(hidden)]
 pub trait Static {
-    type Type;
+    type Type: 'static + Send + Sync;
     fn _share(self) -> Shared<Self::Type, super::W>;
     fn _use_rw<'a, P>(
         self,
@@ -197,12 +198,12 @@ pub trait Static {
 /// This is generally created by calling `use_rw` or `use_w` on a [`shareable!`], or by
 /// calling [`ListEntry::use_rw`](`crate::list::ListEntry::use_rw`) or
 /// [`ListEntry::use_w`](`crate::list::ListEntry::use_w`).
-pub struct Shared<T: 'static, B: 'static> {
-    pub(crate) link: Arc<Link<T>>,
+pub struct Shared<T: 'static + Send + Sync, B: 'static> {
+    pub(crate) link: ArcMap<Link<T>>,
     pub id: Option<usize>,
     __: std::marker::PhantomData<B>,
 }
-impl<T: 'static, B: 'static> Clone for Shared<T, B> {
+impl<T: 'static + Send + Sync, B: 'static> Clone for Shared<T, B> {
     fn clone(&self) -> Self {
         if let Some(id) = self.id {
             self.link.add_listener(id, || Arc::new(|| {}))
@@ -215,7 +216,7 @@ impl<T: 'static, B: 'static> Clone for Shared<T, B> {
     }
 }
 
-impl<T: 'static, B: 'static + super::Flag> Shared<T, B> {
+impl<T: 'static + Send + Sync, B: 'static + super::Flag> Shared<T, B> {
     /// Initialize the hook in scope `cx`.
     ///
     /// The shared value will be initialized with `f()` if it hasn't been created yet.
@@ -302,8 +303,8 @@ impl<T: 'static, B: 'static + super::Flag> Shared<T, B> {
     }
 }
 
-impl<T: 'static> Shared<T, super::W> {
-    pub(crate) fn from_link(link: Arc<Link<T>>) -> Self {
+impl<T: 'static + Send + Sync> Shared<T, super::W> {
+    pub(crate) fn from_link(link: ArcMap<Link<T>>) -> Self {
         Self {
             link,
             id: None,
@@ -320,7 +321,7 @@ impl<T: 'static> Shared<T, super::W> {
             }
         } else {
             let r = Shared {
-                link: Arc::new(Link::new(f())),
+                link: ArcMap::new(Link::new(f())),
                 id: None,
                 __: std::marker::PhantomData,
             };
@@ -330,7 +331,7 @@ impl<T: 'static> Shared<T, super::W> {
     }
 }
 
-impl<T: 'static, B: 'static> Drop for Shared<T, B> {
+impl<T: 'static + Send + Sync, B: 'static> Drop for Shared<T, B> {
     fn drop(&mut self) {
         if let Some(id) = self.id {
             self.link.drop_listener(id);
