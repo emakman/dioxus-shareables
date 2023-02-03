@@ -38,44 +38,54 @@
 //! ```
 
 use crate::arcmap::ArcMap;
-use parking_lot::{
-    MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock, RwLockReadGuard, RwLockWriteGuard,
-};
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 type LinkUpdateMap = FxHashMap<usize, (usize, Arc<dyn Send + Sync + Fn()>)>;
 /// The actual shared data.
-pub(crate) struct Link<T: 'static + Send + Sync>(RwLock<(T, LinkUpdateMap)>);
+#[repr(C)]
+pub(crate) struct Link<T: 'static + Send + Sync>(RwLock<T>, RwLock<LinkUpdateMap>);
 impl<T: 'static + Send + Sync> Link<T> {
     pub(crate) fn new(t: T) -> Self {
-        Self(RwLock::new((t, FxHashMap::default())))
+        Self(RwLock::new(t), RwLock::new(FxHashMap::default()))
     }
     pub(crate) fn add_listener<F: FnOnce() -> Arc<dyn Send + Sync + Fn()>>(&self, id: usize, f: F) {
-        self.0.write().1.entry(id).or_insert_with(|| (0, f())).0 += 1;
+        self.1
+            .write()
+            .unwrap()
+            .entry(id)
+            .or_insert_with(|| (0, f()))
+            .0 += 1;
     }
     pub(crate) fn drop_listener(&self, id: usize) {
-        let mut p = self.0.write();
-        let c = if let Some((c, _)) = p.1.get_mut(&id) {
+        let mut p = self.1.write().unwrap();
+        let c = if let Some((c, _)) = p.get_mut(&id) {
             *c -= 1;
             *c
         } else {
             1
         };
         if c == 0 {
-            p.1.remove(&id);
+            p.remove(&id);
         }
     }
     pub(crate) fn needs_update(&self) {
-        for (_id, (_, u)) in self.0.read().1.iter().filter(|&(_, &(ct, _))| ct > 0) {
+        for (_id, (_, u)) in self
+            .1
+            .read()
+            .unwrap()
+            .iter()
+            .filter(|&(_, &(ct, _))| ct > 0)
+        {
             u()
         }
     }
-    pub(crate) fn borrow(&self) -> MappedRwLockReadGuard<T> {
-        RwLockReadGuard::map(self.0.read(), |(r, _)| r)
+    pub(crate) fn borrow(&self) -> RwLockReadGuard<T> {
+        self.0.read().unwrap()
     }
-    pub(crate) fn borrow_mut(&self) -> MappedRwLockWriteGuard<T> {
-        RwLockWriteGuard::map(self.0.write(), |(r, _)| r)
+    pub(crate) fn borrow_mut(&self) -> RwLockWriteGuard<T> {
+        self.0.write().unwrap()
     }
 }
 #[cfg(feature = "debug")]
@@ -164,18 +174,18 @@ macro_rules! shareable {
         }
         const _: () = {
             #[allow(non_upper_case_globals)]
-            static $IDENT: $crate::reexported::Mutex<$crate::shared::Shareable<$Ty>> = $crate::reexported::Mutex::new($crate::shared::Shareable::new());
+            static $IDENT: std::sync::Mutex<$crate::shared::Shareable<$Ty>> = std::sync::Mutex::new($crate::shared::Shareable::new());
             #[doc(hidden)]
             impl $crate::shared::Static for $IDENT {
                 type Type = $Ty;
                 fn _share(self) -> $crate::Shared<$Ty, $crate::W> {
-                    $crate::Shared::from_shareable(&mut $IDENT.lock(), || {$($init)*})
+                    $crate::Shared::from_shareable(&mut $IDENT.lock().unwrap(), || {$($init)*})
                 }
                 fn _use_rw<'a, P>(self,cx: &$crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::RW> {
-                    $crate::Shared::init(cx, &mut $IDENT.lock(), || {$($init)*}, $crate::RW)
+                    $crate::Shared::init(cx, &mut $IDENT.lock().unwrap(), || {$($init)*}, $crate::RW)
                 }
                 fn _use_w<'a, P>(self,cx: &$crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::W> {
-                    $crate::Shared::init(cx, &mut $IDENT.lock(), || {$($init)*}, $crate::W)
+                    $crate::Shared::init(cx, &mut $IDENT.lock().unwrap(), || {$($init)*}, $crate::W)
                 }
             }
         };
@@ -199,8 +209,8 @@ pub trait Static {
 /// calling [`ListEntry::use_rw`](`crate::list::ListEntry::use_rw`) or
 /// [`ListEntry::use_w`](`crate::list::ListEntry::use_w`).
 pub struct Shared<T: 'static + Send + Sync, B: 'static> {
-    pub(crate) link: ArcMap<Link<T>>,
     pub id: Option<usize>,
+    pub(crate) link: ArcMap<Link<T>>,
     __: std::marker::PhantomData<B>,
 }
 impl<T: 'static + Send + Sync, B: 'static> Clone for Shared<T, B> {
@@ -244,14 +254,14 @@ impl<T: 'static + Send + Sync, B: 'static + super::Flag> Shared<T, B> {
     /// Obtain a write pointer to the shared value and register the change.
     ///
     /// This will mark all components which hold a RW link to the value as needing update.
-    pub fn write(&self) -> MappedRwLockWriteGuard<T> {
+    pub fn write(&self) -> RwLockWriteGuard<T> {
         self.link.needs_update();
         self.link.borrow_mut()
     }
     /// Obtain a write pointer to the shared value but do not register the change.
     ///
     /// This will not notify consumers of the change to the value.
-    pub fn write_silent(&self) -> MappedRwLockWriteGuard<T> {
+    pub fn write_silent(&self) -> RwLockWriteGuard<T> {
         self.link.borrow_mut()
     }
     /// Mark the components which hold a RW link to the value as needing update.
@@ -286,16 +296,16 @@ impl<T: 'static + Send + Sync, B: 'static + super::Flag> Shared<T, B> {
         }
     }
     /// Get the value of the shared data.
-    pub fn read(&self) -> MappedRwLockReadGuard<T> {
+    pub fn read(&self) -> RwLockReadGuard<T> {
         self.link.borrow()
     }
     pub fn listeners(&self) -> String {
         format!(
             "{:?}",
             self.link
-                .0
-                .read()
                 .1
+                .read()
+                .unwrap()
                 .iter()
                 .map(|(&i, &(j, _))| (i, j))
                 .collect::<Vec<_>>()

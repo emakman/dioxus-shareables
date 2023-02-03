@@ -34,7 +34,6 @@ pub mod r#struct;
 #[doc(hidden)]
 pub mod reexported {
     pub use dioxus_core::Scope;
-    pub use parking_lot::Mutex;
     pub use paste::paste;
 }
 
