@@ -43,9 +43,11 @@ use std::sync::Arc;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 type LinkUpdateMap = FxHashMap<usize, (usize, Arc<dyn Send + Sync + Fn()>)>;
-/// The actual shared data.
+/// The actual data in a [`Shareable`].
+///
+/// This struct holds the shared data itself, as well as the pointers to callback functions.
 #[repr(C)]
-pub(crate) struct Link<T: 'static + Send + Sync>(RwLock<T>, RwLock<LinkUpdateMap>);
+pub struct Link<T: 'static + Send + Sync>(RwLock<T>, RwLock<LinkUpdateMap>);
 impl<T: 'static + Send + Sync> Link<T> {
     pub(crate) fn new(t: T) -> Self {
         Self(RwLock::new(t), RwLock::new(FxHashMap::default()))
@@ -201,6 +203,24 @@ pub trait Static {
         cx: &dioxus_core::Scope<'a, P>,
     ) -> &'a mut Shared<Self::Type, super::RW>;
     fn _use_w<'a, P>(self, cx: &dioxus_core::Scope<'a, P>) -> &'a mut Shared<Self::Type, super::W>;
+}
+impl<T: 'static + Send + Sync> Static for ArcMap<Link<T>> {
+    type Type = T;
+    fn _share(self) -> Shared<Self::Type, super::W> {
+        let mut shareable = Shareable(Some(self));
+        Shared::from_shareable(&mut shareable, || unreachable!())
+    }
+    fn _use_rw<'a, P>(
+        self,
+        cx: &dioxus_core::Scope<'a, P>,
+    ) -> &'a mut Shared<Self::Type, super::RW> {
+        let mut shareable = Shareable(Some(self));
+        Shared::init(cx, &mut shareable, || unreachable!(), crate::RW)
+    }
+    fn _use_w<'a, P>(self, cx: &dioxus_core::Scope<'a, P>) -> &'a mut Shared<Self::Type, super::W> {
+        let mut shareable = Shareable(Some(self));
+        Shared::init(cx, &mut shareable, || unreachable!(), crate::W)
+    }
 }
 
 /// A hook to a shared_value.
