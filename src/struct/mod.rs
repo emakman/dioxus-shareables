@@ -3,6 +3,7 @@ pub mod assoc_type;
 pub trait ShareableStruct: Sized {
     type Fields;
     type Actions;
+    type Content;
 }
 pub trait FieldOf<S: ShareableStruct> {
     type RWType;
@@ -140,7 +141,7 @@ impl<F, T: InitField<F>, Flag: super::InitType> InitFieldAs<F, Flag> for T where
 ///     # }
 ///     # #[allow(non_snake_case)]
 ///     fn Component(cx: Scope) -> Element {
-///         let state = GlobalState::use_(&cx, (A, B)); // Use GlobalState with actions A and B.
+///         let state = GlobalState::use_(cx, (A, B)); // Use GlobalState with actions A and B.
 ///         // ...
 ///         let b = *state.b().read(); // We can access field b because actions B includes it.
 ///         //...
@@ -186,9 +187,9 @@ impl<F, T: InitField<F>, Flag: super::InitType> InitFieldAs<F, Flag> for T where
 ///     // ...
 ///     # #[allow(non_snake_case)]
 ///     fn Component(cx: Scope) -> Element {
-///         let a_state = GlobalState::use_(&cx, A);
-///         let b_state = GlobalState::use_(&cx, B);
-///         let c_state = GlobalState::use_(&cx, C);
+///         let a_state = GlobalState::use_(cx, A);
+///         let b_state = GlobalState::use_(cx, B);
+///         let c_state = GlobalState::use_(cx, C);
 ///
 ///         // a_state.c_method(); // This will fail since `a_state` doesn't doesn't meet the RW[c] requirement.
 ///         // b_state.c_method(); // This will fail because the type is wrong.
@@ -234,8 +235,8 @@ impl<F, T: InitField<F>, Flag: super::InitType> InitFieldAs<F, Flag> for T where
 ///     // ...
 ///     # #[allow(non_snake_case)]
 ///     fn Component(cx: Scope) -> Element {
-///         let a_state = GlobalState::use_(&cx, A);
-///         let b_state = GlobalState::use_(&cx, B);
+///         let a_state = GlobalState::use_(cx, A);
+///         let b_state = GlobalState::use_(cx, B);
 ///
 ///         // a_state.calculate_from_a_and_c(); // This will fail since `a_state` doesn't meet the RW[c] requirement.
 ///         b_state.calculate_from_a_and_c(); // This works, but only if the type resolves correctly.
@@ -285,7 +286,7 @@ impl<F, T: InitField<F>, Flag: super::InitType> InitFieldAs<F, Flag> for T where
 ///     // ...
 ///     # #[allow(non_snake_case)]
 ///     fn Component(cx: Scope) -> Element {
-///         let mgs = MoreGlobalState::use_(&cx, UBC);
+///         let mgs = MoreGlobalState::use_(cx, UBC);
 ///         mgs.s().clever_d_method(); // Works bcause action our mgs.s() was initialized with the
 ///                                    // `B` action.
 ///         // ...
@@ -641,7 +642,7 @@ macro_rules! shareable_struct_main {
                     }
                 }
                 #[doc(hidden)]
-                $v fn __init_in<P>(&mut self, cx: &$crate::reexported::Scope<P>) {
+                $v fn __init_in<P>(&mut self, cx: $crate::reexported::Scope<P>) {
                     $(
                         <__Actions::[<$f:camel Flag>] as $crate::InitType>::init_field(
                             cx,
@@ -653,7 +654,7 @@ macro_rules! shareable_struct_main {
                         self.$g.__init_in(cx);
                     )*
                 }
-                $v fn use_<'a, P>(cx: &$crate::reexported::Scope<'a, P>, _: __Actions) -> &'a mut Self {
+                $v fn use_<'a, P>(cx: $crate::reexported::Scope<'a, P>, _: __Actions) -> &'a mut Self {
                     cx.use_hook(|| {
                         let mut self_ = Self::__uninit();
                         self_.__init_in(cx);
@@ -731,12 +732,57 @@ macro_rules! shareable_struct_main {
                 #[derive(Clone, Copy)]
                 $v struct InitAs<F, A>(F, A);
 
+                $v struct [<$Struct Content>] {
+                    $($f: $crate::shared::Link<$fT>,)*
+                    $($g: $crate::arcmap::ArcMap<<$gT as $crate::r#struct::ShareableStruct>::Content>,)*
+                }
+                impl Default for [<$Struct Content>] {
+                    fn default() -> Self {
+                        [<$Struct Content>] {
+                            $($f: $crate::shared::Link::new({$init}),)*
+                            $($g: $crate::arcmap::ArcMap::new(Default::default()),)*
+                        }
+                    }
+                }
+
                 impl<__Actions: [<$Struct Actions>]> $crate::r#struct::ShareableStruct for $Struct<__Actions> {
                     type Fields = [<$Struct FieldData>];
                     type Actions = [<$Struct ActionData>];
+                    type Content = [<$Struct Content>];
                 }
 
-                $($crate::shareable!{$v [<$Struct FieldShareable $f:camel>]: $fT = $init}
+                static [<$Struct:snake:upper _STATIC>]:
+                    std::sync::Mutex<Option<$crate::arcmap::ArcMap<[<$Struct Content>]>>> = std::sync::Mutex::new(None);
+
+                $(  #[derive(Clone, Copy)]
+                    $v struct [<$Struct FieldShareable $f:camel>];
+                    impl $crate::shared::Static for [<$Struct FieldShareable $f:camel>] {
+                        type Type = $fT;
+                        fn _share(self) -> $crate::shared::Shared<Self::Type, $crate::W> {
+                            let mut s = [<$Struct:snake:upper _STATIC>].lock().unwrap();
+                            let a = match &mut *s {
+                                Some(s) => s.clone(),
+                                s @ None => s.insert($crate::arcmap::ArcMap::new(Default::default())).clone()
+                            };
+                            a.map(|c| &c.$f)._share()
+                        }
+                        fn _use_rw<'a, P>(self, cx: $crate::reexported::Scope<'a, P>) -> &'a mut $crate::shared::Shared<Self::Type, $crate::RW> {
+                            let mut s = [<$Struct:snake:upper _STATIC>].lock().unwrap();
+                            let a = match &mut *s {
+                                Some(s) => s.clone(),
+                                s @ None => s.insert($crate::arcmap::ArcMap::new(Default::default())).clone()
+                            };
+                            a.map(|c| &c.$f)._use_rw(cx)
+                        }
+                        fn _use_w<'a, P>(self, cx: $crate::reexported::Scope<'a, P>) -> &'a mut $crate::shared::Shared<Self::Type, $crate::W> {
+                            let mut s = [<$Struct:snake:upper _STATIC>].lock().unwrap();
+                            let a = match &mut *s {
+                                Some(s) => s.clone(),
+                                s @ None => s.insert($crate::arcmap::ArcMap::new(Default::default())).clone()
+                            };
+                            a.map(|c| &c.$f)._use_w(cx)
+                        }
+                    }
                     impl $crate::r#struct::FieldOf<$Struct> for [<$Struct FieldShareable $f:camel>] {
                         type WType = InitAs<[<$Struct FieldShareable $f:camel>], $crate::W>;
                         type RWType = InitAs<[<$Struct FieldShareable $f:camel>], $crate::RW>;

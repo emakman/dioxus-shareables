@@ -13,7 +13,7 @@
 //!
 //! #[allow(non_snake_case)]
 //! pub fn Reader(cx: Scope) -> Element {
-//!     let r = *Var.use_rw(&cx).read(); // this component will update when Var changes.
+//!     let r = *Var.use_rw(cx).read(); // this component will update when Var changes.
 //!     cx.render(rsx! {
 //!         "The number is: {r}"
 //!     })
@@ -21,7 +21,7 @@
 //!
 //! #[allow(non_snake_case)]
 //! pub fn Writer(cx: Scope) -> Element {
-//!     let w1 = Var.use_w(&cx); // this component writes to Var, but does not get updated when Var
+//!     let w1 = Var.use_w(cx); // this component writes to Var, but does not get updated when Var
 //!                              // changes
 //!     let w2 = w1.clone();
 //!     cx.render(rsx! {
@@ -49,7 +49,7 @@ type LinkUpdateMap = FxHashMap<usize, (usize, Arc<dyn Send + Sync + Fn()>)>;
 #[repr(C)]
 pub struct Link<T: 'static + Send + Sync>(RwLock<T>, RwLock<LinkUpdateMap>);
 impl<T: 'static + Send + Sync> Link<T> {
-    pub(crate) fn new(t: T) -> Self {
+    pub fn new(t: T) -> Self {
         Self(RwLock::new(t), RwLock::new(FxHashMap::default()))
     }
     pub(crate) fn add_listener<F: FnOnce() -> Arc<dyn Send + Sync + Fn()>>(&self, id: usize, f: F) {
@@ -132,8 +132,8 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Shareable<T> {
 ///                                                                 // access the global.
 ///
 /// fn component(cx: Scope) -> Element {
-///     let rw_hook = Var.use_rw(&cx);
-///     let w_hook = Var.use_w(&cx);
+///     let rw_hook = Var.use_rw(cx);
+///     let w_hook = Var.use_w(cx);
 ///     // ...
 ///     # cx.render(rsx! {div {}})
 /// }
@@ -149,7 +149,7 @@ macro_rules! shareable {
             ///
             /// `cx` will be marked as needing update each time you call `.write()` or
             /// `.set()` on this value.
-            pub fn use_rw<'a, P>(self,cx: &$crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::RW> {
+            pub fn use_rw<'a, P>(self,cx: $crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::RW> {
                 $crate::shared::Static::_use_rw(self, cx)
             }
             /// Obtain a write pointer to the shared value.
@@ -160,7 +160,7 @@ macro_rules! shareable {
             /// The promise you are making when you `use_w` is that your component does not
             /// need to know when the value changes; i.e., you might read the value, but it
             /// doesn't change what you display.
-            pub fn use_w<'a, P>(self,cx: &$crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::W> {
+            pub fn use_w<'a, P>(self,cx: $crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::W> {
                 $crate::shared::Static::_use_w(self, cx)
             }
             /// Get a pointer to the value, but don't call 'use_hook'.
@@ -183,10 +183,10 @@ macro_rules! shareable {
                 fn _share(self) -> $crate::Shared<$Ty, $crate::W> {
                     $crate::Shared::from_shareable(&mut $IDENT.lock().unwrap(), || {$($init)*})
                 }
-                fn _use_rw<'a, P>(self,cx: &$crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::RW> {
+                fn _use_rw<'a, P>(self,cx: $crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::RW> {
                     $crate::Shared::init(cx, &mut $IDENT.lock().unwrap(), || {$($init)*}, $crate::RW)
                 }
-                fn _use_w<'a, P>(self,cx: &$crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::W> {
+                fn _use_w<'a, P>(self,cx: $crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::W> {
                     $crate::Shared::init(cx, &mut $IDENT.lock().unwrap(), || {$($init)*}, $crate::W)
                 }
             }
@@ -198,11 +198,9 @@ macro_rules! shareable {
 pub trait Static {
     type Type: 'static + Send + Sync;
     fn _share(self) -> Shared<Self::Type, super::W>;
-    fn _use_rw<'a, P>(
-        self,
-        cx: &dioxus_core::Scope<'a, P>,
-    ) -> &'a mut Shared<Self::Type, super::RW>;
-    fn _use_w<'a, P>(self, cx: &dioxus_core::Scope<'a, P>) -> &'a mut Shared<Self::Type, super::W>;
+    fn _use_rw<'a, P>(self, cx: dioxus_core::Scope<'a, P>)
+        -> &'a mut Shared<Self::Type, super::RW>;
+    fn _use_w<'a, P>(self, cx: dioxus_core::Scope<'a, P>) -> &'a mut Shared<Self::Type, super::W>;
 }
 impl<T: 'static + Send + Sync> Static for ArcMap<Link<T>> {
     type Type = T;
@@ -212,12 +210,12 @@ impl<T: 'static + Send + Sync> Static for ArcMap<Link<T>> {
     }
     fn _use_rw<'a, P>(
         self,
-        cx: &dioxus_core::Scope<'a, P>,
+        cx: dioxus_core::Scope<'a, P>,
     ) -> &'a mut Shared<Self::Type, super::RW> {
         let mut shareable = Shareable(Some(self));
         Shared::init(cx, &mut shareable, || unreachable!(), crate::RW)
     }
-    fn _use_w<'a, P>(self, cx: &dioxus_core::Scope<'a, P>) -> &'a mut Shared<Self::Type, super::W> {
+    fn _use_w<'a, P>(self, cx: dioxus_core::Scope<'a, P>) -> &'a mut Shared<Self::Type, super::W> {
         let mut shareable = Shareable(Some(self));
         Shared::init(cx, &mut shareable, || unreachable!(), crate::W)
     }
@@ -254,7 +252,7 @@ impl<T: 'static + Send + Sync, B: 'static + super::Flag> Shared<T, B> {
     /// NOTE: this method should generally not be used directly; instead, shared values are usually
     /// created with [`shareable!`].
     pub fn init<'a, P, F: FnOnce() -> T>(
-        cx: &dioxus_core::Scope<'a, P>,
+        cx: dioxus_core::Scope<'a, P>,
         opt: &mut Shareable<T>,
         f: F,
         _: B,

@@ -79,7 +79,7 @@ mod sealed {
 
     pub trait InitType: Sized + Copy {
         fn __init_field<P, T: 'static + Send + Sync, S: crate::shared::Static<Type = T>>(
-            cx: &dioxus_core::Scope<P>,
+            cx: dioxus_core::Scope<P>,
             _: &mut Option<crate::shared::Shared<T, Self>>,
             _: S,
         );
@@ -90,7 +90,7 @@ mod sealed {
     }
     impl InitType for () {
         fn __init_field<P, T: 'static + Send + Sync, S: crate::shared::Static<Type = T>>(
-            _: &dioxus_core::Scope<P>,
+            _: dioxus_core::Scope<P>,
             _: &mut Option<crate::Shared<T, Self>>,
             _: S,
         ) {
@@ -116,7 +116,7 @@ impl<T: sealed::Flag> Flag for T {}
 pub trait InitType: sealed::InitType {
     #[doc(hidden)]
     fn init_field<P, T: 'static + Send + Sync, S: shared::Static<Type = T>>(
-        cx: &dioxus_core::Scope<P>,
+        cx: dioxus_core::Scope<P>,
         f: &mut Option<Shared<T, Self>>,
         s: S,
     ) {
@@ -142,7 +142,7 @@ impl sealed::Flag for W {
 }
 impl sealed::InitType for W {
     fn __init_field<P, T: 'static + Send + Sync, S: shared::Static<Type = T>>(
-        _: &dioxus_core::Scope<P>,
+        _: dioxus_core::Scope<P>,
         f: &mut Option<Shared<T, Self>>,
         s: S,
     ) {
@@ -171,7 +171,7 @@ impl sealed::Flag for RW {
 }
 impl sealed::InitType for RW {
     fn __init_field<P, T: 'static + Send + Sync, S: shared::Static<Type = T>>(
-        cx: &dioxus_core::Scope<P>,
+        cx: dioxus_core::Scope<P>,
         f: &mut Option<Shared<T, Self>>,
         s: S,
     ) {
