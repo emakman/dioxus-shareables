@@ -2,29 +2,53 @@
 
 #[doc(hidden)]
 #[macro_export]
+#[allow(clippy::module_name_repetitions)]
 macro_rules! struct_assoc_type {
+    ({$Struct:ty}::Actions::$action:ident) => {
+        $crate::reexported::paste! {
+            $crate::struct_assoc_type! {
+                @(<<$Struct as $crate::r#struct::ShareableStruct>::ActionData as )([<Action $action:camel>])(>::Type)
+            }
+        }
+    };
     ($Struct:ident::Actions::$action:ident) => {
         $crate::reexported::paste! {
             $crate::struct_assoc_type! {
-                @(<<$Struct as $crate::r#struct::ShareableStruct>::Actions as )([<Action $action:camel>])(>::Type)
+                @(<<$Struct as $crate::r#struct::ShareableStruct>::ActionData as )([<Action $action:camel>])(>::Type)
+            }
+        }
+    };
+    ({$Struct:ty}::Fields::$field:ident) => {
+        $crate::reexported::paste! {
+            $crate::struct_assoc_type! {
+                @(<<$Struct as $crate::r#struct::ShareableStruct>::FieldData as )([<Field $field:camel>])(>::Type)
             }
         }
     };
     ($Struct:ident::Fields::$field:ident) => {
         $crate::reexported::paste! {
             $crate::struct_assoc_type! {
-                @(<<$Struct as $crate::r#struct::ShareableStruct>::Fields as )([<Field $field:camel>])(>::Type)
+                @(<<$Struct as $crate::r#struct::ShareableStruct>::FieldData as )([<Field $field:camel>])(>::Type)
+            }
+        }
+    };
+    ({$Struct:ty}::Substructs::$field:ident::Actions::$action:ident) => {
+        $crate::reexported::paste! {
+            $crate::struct_assoc_type! {
+                @(<<<<$Struct as $crate::r#struct::ShareableStruct>::FieldData as )([<Field $field:camel>])(>::Type)
+                @(as $crate::r#struct::ShareableStruct>::ActionData as)([<Action $action>])(>::Type)
             }
         }
     };
     ($Struct:ident::Substructs::$field:ident::Actions::$action:ident) => {
         $crate::reexported::paste! {
             $crate::struct_assoc_type! {
-                @(<<<<$Struct as $crate::r#struct::ShareableStruct>::Fields as )([<Field $field:camel>])(>::Type)
-                @(as $crate::r#struct::ShareableStruct>::Actions as)([<Action $action>])(>::Type)
+                @(<<<<$Struct as $crate::r#struct::ShareableStruct>::FieldData as )([<Field $field:camel>])(>::Type)
+                @(as $crate::r#struct::ShareableStruct>::ActionData as)([<Action $action>])(>::Type)
             }
         }
     };
+    ($Struct:ident::Shareable) => { $crate::arcmap::ArcMap<<$Struct as $crate::r#struct::ShareableStruct>::Content> };
     (impl $Struct:ident::Actions::$action:ident for $T:ty = $($what:tt)*) => {
         $crate::reexported::paste! {
             $crate::struct_assoc_type! {
@@ -84,6 +108,7 @@ pub trait AssocType<
 {
     type Type;
 }
+#[must_use]
 pub const fn seg_str(s: &'static str, r: usize) -> u128 {
     let mut i = 0usize;
     let mut c = 0;

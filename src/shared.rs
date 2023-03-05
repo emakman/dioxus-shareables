@@ -52,12 +52,12 @@ impl<T: 'static + Send + Sync> Link<T> {
     pub fn new(t: T) -> Self {
         Self(RwLock::new(t), RwLock::new(FxHashMap::default()))
     }
-    pub(crate) fn add_listener<F: FnOnce() -> Arc<dyn Send + Sync + Fn()>>(&self, id: usize, f: F) {
+    pub(crate) fn add_listener(&self, id: usize, f: Arc<dyn Send + Sync + Fn()>) {
         self.1
             .write()
             .unwrap()
             .entry(id)
-            .or_insert_with(|| (0, f()))
+            .or_insert_with(|| (0, f))
             .0 += 1;
     }
     pub(crate) fn drop_listener(&self, id: usize) {
@@ -80,7 +80,7 @@ impl<T: 'static + Send + Sync> Link<T> {
             .iter()
             .filter(|&(_, &(ct, _))| ct > 0)
         {
-            u()
+            u();
         }
     }
     pub(crate) fn borrow(&self) -> RwLockReadGuard<T> {
@@ -108,6 +108,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Link<T> {
 /// types.
 pub struct Shareable<T: 'static + Send + Sync>(pub(crate) Option<ArcMap<Link<T>>>);
 impl<T: 'static + Send + Sync> Shareable<T> {
+    #[must_use]
     pub const fn new() -> Self {
         Self(None)
     }
@@ -183,7 +184,7 @@ macro_rules! shareable {
                 fn _share(self) -> $crate::Shared<$Ty, $crate::W> {
                     $crate::Shared::from_shareable(&mut $IDENT.lock().unwrap(), || {$($init)*})
                 }
-                fn _use_rw<'a, P>(self,cx: $crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::RW> {
+                fn _use_rw<P>(self,cx: $crate::reexported::Scope<P>) -> &mut $crate::Shared<$Ty, $crate::RW> {
                     $crate::Shared::init(cx, &mut $IDENT.lock().unwrap(), || {$($init)*}, $crate::RW)
                 }
                 fn _use_w<'a, P>(self,cx: $crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::W> {
@@ -198,9 +199,8 @@ macro_rules! shareable {
 pub trait Static {
     type Type: 'static + Send + Sync;
     fn _share(self) -> Shared<Self::Type, super::W>;
-    fn _use_rw<'a, P>(self, cx: dioxus_core::Scope<'a, P>)
-        -> &'a mut Shared<Self::Type, super::RW>;
-    fn _use_w<'a, P>(self, cx: dioxus_core::Scope<'a, P>) -> &'a mut Shared<Self::Type, super::W>;
+    fn _use_rw<P>(self, cx: dioxus_core::Scope<P>) -> &mut Shared<Self::Type, super::RW>;
+    fn _use_w<P>(self, cx: dioxus_core::Scope<P>) -> &mut Shared<Self::Type, super::W>;
 }
 impl<T: 'static + Send + Sync> Static for ArcMap<Link<T>> {
     type Type = T;
@@ -208,33 +208,33 @@ impl<T: 'static + Send + Sync> Static for ArcMap<Link<T>> {
         let mut shareable = Shareable(Some(self));
         Shared::from_shareable(&mut shareable, || unreachable!())
     }
-    fn _use_rw<'a, P>(
-        self,
-        cx: dioxus_core::Scope<'a, P>,
-    ) -> &'a mut Shared<Self::Type, super::RW> {
+    fn _use_rw<P>(self, cx: dioxus_core::Scope<P>) -> &mut Shared<Self::Type, super::RW> {
         let mut shareable = Shareable(Some(self));
         Shared::init(cx, &mut shareable, || unreachable!(), crate::RW)
     }
-    fn _use_w<'a, P>(self, cx: dioxus_core::Scope<'a, P>) -> &'a mut Shared<Self::Type, super::W> {
+    fn _use_w<P>(self, cx: dioxus_core::Scope<P>) -> &mut Shared<Self::Type, super::W> {
         let mut shareable = Shareable(Some(self));
         Shared::init(cx, &mut shareable, || unreachable!(), crate::W)
     }
 }
 
-/// A hook to a shared_value.
+/// A hook to a shared value.
 ///
 /// This is generally created by calling `use_rw` or `use_w` on a [`shareable!`], or by
 /// calling [`ListEntry::use_rw`](`crate::list::ListEntry::use_rw`) or
 /// [`ListEntry::use_w`](`crate::list::ListEntry::use_w`).
+#[repr(C)] // Since B is always a ZST, the compiler won't (in practice) change the layout of
+           // Shared<T, B> depending on B. However, the rust makes no such guarantee, and this
+           // should be low-cost (only the padding needed to align an Option<usize>).
 pub struct Shared<T: 'static + Send + Sync, B: 'static> {
-    pub id: Option<usize>,
     pub(crate) link: ArcMap<Link<T>>,
+    pub id: Option<usize>,
     __: std::marker::PhantomData<B>,
 }
 impl<T: 'static + Send + Sync, B: 'static> Clone for Shared<T, B> {
     fn clone(&self) -> Self {
         if let Some(id) = self.id {
-            self.link.add_listener(id, || Arc::new(|| {}))
+            self.link.add_listener(id, Arc::new(|| {}));
         }
         Self {
             link: self.link.clone(),
@@ -258,16 +258,22 @@ impl<T: 'static + Send + Sync, B: 'static + super::Flag> Shared<T, B> {
         _: B,
     ) -> &'a mut Self {
         let id = cx.scope_id().0;
-        cx.use_hook(|| {
-            let mut r: Shared<T, super::W> = Shared::from_shareable(opt, f);
-            if B::READ {
-                r.id = Some(id);
-                r.link.add_listener(id, || cx.schedule_update());
-            }
-            // SAFETY: Transmuting between Shared<T, A> and Shared<T, B> is safe
-            // because the layout of Shared<T, F> does not depend on F.
-            unsafe { std::mem::transmute::<_, Self>(r) }
-        })
+        cx.use_hook(|| Self::init_with_listener((id, cx.schedule_update()), opt, f))
+    }
+    /// The inner part of init without the `use_hook`.
+    pub(crate) fn init_with_listener<F: FnOnce() -> T>(
+        (id, updater): (usize, Arc<dyn Send + Sync + Fn()>),
+        opt: &mut Shareable<T>,
+        f: F,
+    ) -> Self {
+        let mut r: Shared<T, super::W> = Shared::from_shareable(opt, f);
+        if B::READ {
+            r.id = Some(id);
+            r.link.add_listener(id, updater);
+        }
+        // SAFETY: Transmuting between Shared<T, A> and Shared<T, B> is safe
+        // because the layout of Shared<T, F> does not depend on F.
+        unsafe { std::mem::transmute::<_, Self>(r) }
     }
     /// Obtain a write pointer to the shared value and register the change.
     ///
@@ -317,6 +323,8 @@ impl<T: 'static + Send + Sync, B: 'static + super::Flag> Shared<T, B> {
     pub fn read(&self) -> RwLockReadGuard<T> {
         self.link.borrow()
     }
+    #[cfg(feature = "debug")]
+    #[must_use]
     pub fn listeners(&self) -> String {
         format!(
             "{:?}",

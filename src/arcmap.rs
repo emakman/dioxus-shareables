@@ -29,8 +29,19 @@ impl<T> ArcMap<T> {
             outer: self.outer,
         }
     }
+    #[allow(clippy::must_use_candidate)]
     pub fn ptr_eq(a: &Self, b: &Self) -> bool {
         a.inner == b.inner
+    }
+}
+impl<T> PartialEq for ArcMap<T> {
+    fn eq(&self, o: &Self) -> bool {
+        ArcMap::ptr_eq(self, o)
+    }
+}
+impl<T: 'static + Default + Send + Sync> Default for ArcMap<T> {
+    fn default() -> Self {
+        Self::new(Default::default())
     }
 }
 impl<T: 'static + Send + Sync> From<std::sync::Arc<T>> for ArcMap<T> {
@@ -89,5 +100,32 @@ trait Arc: Send + Sync {
 impl<T: 'static + Send + Sync> Arc for std::sync::Arc<T> {
     fn box_clone(&self) -> Box<dyn Arc> {
         Box::new(self.clone())
+    }
+}
+
+impl<T: crate::r#struct::Content> ArcMap<T> {
+    /// Access the contained value as type `S`, a struct created using [`shareable_struct!`].
+    #[must_use]
+    pub fn use_<'a, S: 'static + crate::r#struct::ShareableStructWithActions<Base = T::For>, P>(
+        &self,
+        cx: dioxus_core::Scope<'a, P>,
+    ) -> &'a S {
+        let id = cx.scope_id().0;
+        cx.use_hook(|| {
+            <S::Actions as crate::r#struct::ActionsFor<T::For>>::use_(
+                (id, cx.schedule_update()),
+                self.clone(),
+            )
+        })
+    }
+    /// Access the contained value as type `S`, a struct created using [`shareable_struct!`].
+    #[must_use]
+    pub fn share<S: 'static + crate::r#struct::ShareableStructWithActions<Base = T::For>>(
+        &self,
+    ) -> S
+    where
+        S::Actions: crate::r#struct::WriteActionsFor<T::For>,
+    {
+        <S::Actions as crate::r#struct::WriteActionsFor<T::For>>::share(self.clone())
     }
 }
