@@ -146,10 +146,10 @@ macro_rules! shareable {
         #[derive(Clone, Copy)]
         $vis struct $IDENT;
         impl $IDENT {
-            /// Obtain a RW pointer to the shared value.
+            /// Obtain a read/write pointer to the shared value.
             ///
-            /// `cx` will be marked as needing update each time you call `.write()` or
-            /// `.set()` on this value.
+            /// `cx` will be marked as needing update each time you call `.write()` or `.set()` on
+            /// this value.
             pub fn use_rw<'a, P>(self,cx: $crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::RW> {
                 $crate::shared::Static::_use_rw(self, cx)
             }
@@ -164,13 +164,13 @@ macro_rules! shareable {
             pub fn use_w<'a, P>(self,cx: $crate::reexported::Scope<'a, P>) -> &'a mut $crate::Shared<$Ty, $crate::W> {
                 $crate::shared::Static::_use_w(self, cx)
             }
-            /// Get a pointer to the value, but don't call 'use_hook'.
+            /// Get a pointer to the value, but don't call `use_hook`.
             ///
             /// This is generally to be avoided in components, but should be used when the shared
             /// value must be initialized within a loop, or within the initializer of another hook.
             ///
-            /// If you don't know why you should be using it, use either [`use_rw`](Self::use_rw)
-            /// or [`use_w`](Self::use_w) instead.
+            /// If you don't know why you should be using it, use either [`use_rw`](`Self::use_rw`)
+            /// or [`use_w`](`Self::use_w`) instead.
             pub fn share(self) -> $crate::Shared<$Ty, $crate::W> {
                 $crate::shared::Static::_share(self)
             }

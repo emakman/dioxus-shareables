@@ -15,11 +15,11 @@ use crate::shared::{Link, Shareable, Shared};
 ///
 /// shareable!(Numbers: List<usize> = [3, 5, 7].into_iter().collect());
 ///
-/// #[allow(non_snake_case)]
+/// # #[allow(non_snake_case)]
 /// fn ListNumbers(cx: Scope) -> Element {
-///     let nums = Numbers.use_rw(&cx); // This component is updated when new items are added to or
-///                                     // removed from the list, but not when the individual list
-///                                     // items change.
+///     let nums = Numbers.use_rw(cx); // This component is updated when new items are added to or
+///                                    // removed from the list, but not when the individual list
+///                                    // items change.
 ///     let w = nums.clone();
 ///     cx.render(rsx! {
 ///         ul {
@@ -29,14 +29,14 @@ use crate::shared::{Link, Shareable, Shared};
 ///             onclick: move |_| {
 ///                 let mut w = w.write();
 ///                 let sum = w.iter().map(|n| *n.share().read()).sum();
-///                 w.push(sum)
+///                 w.push(sum);
 ///             },
 ///             "Sum"
 ///         }
 ///     })
 /// }
 ///
-/// #[allow(non_snake_case)]
+/// # #[allow(non_snake_case)]
 /// #[inline_props]
 /// fn ListItem(cx: Scope, num: ListEntry<usize>) -> Element {
 ///     let num = num.use_rw(&cx); // This component is updated when this specific entry in the

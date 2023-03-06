@@ -12,11 +12,11 @@
 //! ...
 //! [dependencies]
 //! ...
-//! dioxus-shareables = { version = "0.3.0", features = ["dixous-git"] }
+//! dioxus-shareables = { version = "0.3.2", features = ["dixous-git"] }
 //! ...
 //! [replace]
-//! "dioxus-core:0.3.0" = { git = 'https://github.com/dioxuslabs/dioxus' }
-//! "dioxus-hooks:0.3.0" = { git = 'https://github.com/dioxuslabs/dioxus' }
+//! "dioxus-core:0.3.2" = { git = 'https://github.com/dioxuslabs/dioxus' }
+//! "dioxus-hooks:0.3.2" = { git = 'https://github.com/dioxuslabs/dioxus' }
 //!
 //! ```
 #![deny(clippy::pedantic)]

@@ -1,8 +1,6 @@
 pub mod assoc_type;
 /// Create a `struct` in which sharing can be controlled on the field level.
 ///
-/// TODO: Fix this documentation.
-///
 /// The idea is that each field of the struct will have separate update handles (i.e., be stored in
 /// a separate (`Link`)[`crate::shared::Link`], and loaded only when requested. The actions block
 /// describes possible ways of using the struct in terms of what type of access
@@ -256,7 +254,7 @@ pub mod assoc_type;
 ///         where
 ///             Self: AsRef<TodoList<struct_actions!(TodoList { todos: W })>>
 ///         {
-///             let new_todo: struct_assoc_type!{Todo::Shareable} = Default::default();
+///             let new_todo = <struct_assoc_type!{Todo::Shareable}>::default();
 ///             let e: Todo<CreateTodo> = new_todo.share();
 ///             *e.desc().write() = desc;
 ///             *e.priority().write() = priority;
@@ -264,6 +262,7 @@ pub mod assoc_type;
 ///         }
 ///     }
 ///     // ...
+///     # #[allow(non_snake_case)]
 ///     fn TodoListComponent(cx: Scope) -> Element {
 ///         let list: &TodoList<ReadAll> = TodoList::use_(cx);
 ///         let title = list.title().read();
@@ -275,6 +274,7 @@ pub mod assoc_type;
 ///         })
 ///     }
 ///     // ...
+///     # #[allow(non_snake_case)]
 ///     #[inline_props]
 ///     fn TodoComponent(cx: Scope, todo: struct_assoc_type!(Todo::Shareable)) -> Element {
 ///         let todo: &Todo<ShowTodo> = todo.use_(cx); // = todo.use_::<Todo<ShowTodo>>(cx);
