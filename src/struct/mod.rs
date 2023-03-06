@@ -655,7 +655,7 @@ macro_rules! __shareable_struct_parse_actions {
                 fielddata: [<$Struct FieldData>]
                 substructdata: [<$Struct SubstructData>]
                 actiondata: [<$Struct ActionData>]
-                asinit: [<$Struct InitAs>]
+                flagas: [<$Struct FlagAs>]
                 fields: [$([
                     vis: $fvis
                     name: $f
@@ -703,7 +703,7 @@ macro_rules! __shareable_struct_main {
       fielddata: $StructFieldData:ident
       substructdata: $StructSubstructData:ident
       actiondata: $StructActionData:ident
-      asinit: $StructInitAs:ident
+      flagas: $StructFlagAs:ident
       fields: [$([
                vis: [$fvis:vis]
                name: $f:ident
@@ -737,20 +737,15 @@ macro_rules! __shareable_struct_main {
                    // Since align(Struct<__Actions>) is just align(Shared<_, _>) (which in turn is
                    // the align of each of the fields), this shouldn't end up adding padding.
         $vis struct $Struct<__Actions: $StructActions = ()> {
-            $($f: Option<$crate::shared::Shared<$fty, <__Actions as $crate::r#struct::InitField<$Struct,$crate::struct_assoc_type!($Struct::Fields::$f)>>::Flag>>,)*
+            $($f: Option<$crate::shared::Shared<$fty, <__Actions as $crate::r#struct::FieldFlag<$Struct,$crate::struct_assoc_type!($Struct::Fields::$f)>>::Flag>>,)*
             $($svis $s:
                 <
                     <__Actions as
-                        $crate::r#struct::InitSubstruct<
+                        $crate::r#struct::SubstructFlag<
                             $Struct,
-                            $crate::struct_assoc_type!($Struct::Fields::$s)
+                            $crate::struct_assoc_type!($Struct::Substructs::$s)
                         >
-                    >::Actions as
-                        $crate::r#struct::ActionsFor<
-                            <$crate::struct_assoc_type!($Struct::Fields::$s) as
-                                $crate::r#struct::SubstructOf<$Struct>
-                            >::Type
-                        >
+                    >::Actions as $crate::r#struct::ActionsFor<<$crate::struct_assoc_type!($Struct::Substructs::$s) as $crate::r#struct::Substruct>::Type>
                 >::WithActions,
             )*
             #[doc(hidden)]
@@ -787,7 +782,7 @@ macro_rules! __shareable_struct_main {
             }
         }
         impl<__Actions: $StructActions> $Struct<__Actions> {
-            $( fn $f(&self) -> &$crate::shared::Shared<$fty, <__Actions as $crate::r#struct::InitField<$Struct, $crate::struct_assoc_type!($Struct::Fields::$f)>>::Flag> {
+            $( fn $f(&self) -> &$crate::shared::Shared<$fty, <__Actions as $crate::r#struct::FieldFlag<$Struct, $crate::struct_assoc_type!($Struct::Fields::$f)>>::Flag> {
                    unimplemented!()
                }
             )*
@@ -800,8 +795,8 @@ macro_rules! __shareable_struct_main {
         }
         $vis trait $StructActions:
             Default
-                $(+ $crate::r#struct::InitField<$Struct,$crate::struct_assoc_type!($Struct::Fields::$f)>)*
-                $(+ $crate::r#struct::InitSubstruct<$Struct,$crate::struct_assoc_type!($Struct::Fields::$s)>)*
+                $(+ $crate::r#struct::FieldFlag<$Struct,$crate::struct_assoc_type!($Struct::Fields::$f)>)*
+                $(+ $crate::r#struct::SubstructFlag<$Struct,$crate::struct_assoc_type!($Struct::Substructs::$s)>)*
         {
         }
         impl<__Actions: $StructActions> $crate::r#struct::ShareableStructWithActions for $Struct<__Actions> {
@@ -846,7 +841,8 @@ macro_rules! __shareable_struct_main {
             $(
                 $vis struct $fdata;
                 $crate::struct_assoc_type!(impl $Struct::Fields::$f for $StructFieldData = $fdata);
-                impl $crate::r#struct::FieldOf<$Struct> for $fdata {
+                impl $crate::r#struct::Field for $fdata {
+                    type Of = $Struct;
                     type Type = $fty;
                     fn get_field(
                         __field: $crate::arcmap::ArcMap<$StructContent>
@@ -854,51 +850,52 @@ macro_rules! __shareable_struct_main {
                         __field.map(|__field| &__field.$f)
                     }
                 }
-                impl<__InitFlag: $crate::r#struct::InitFlag> $crate::r#struct::InitField<$Struct, $fdata> for $StructInitAs<$fdata, __InitFlag> {
-                    type Flag = __InitFlag;
+                impl<__StructFlag: $crate::r#struct::StructFlag> $crate::r#struct::FieldFlag<$Struct, $fdata> for $StructFlagAs<$fdata, __StructFlag> {
+                    type Flag = __StructFlag;
                 }
-                impl<_F> $crate::r#struct::Simple for $StructInitAs<$fdata,_F> {}
-                impl<_A, _F> $crate::r#struct::Append<_A> for $StructInitAs<$fdata,_F> {
-                    type Appended = ($StructInitAs<$fdata,_F>, _A);
+                impl<_F> $crate::r#struct::Simple for $StructFlagAs<$fdata,_F> {}
+                impl<_A, _F> $crate::r#struct::Append<_A> for $StructFlagAs<$fdata,_F> {
+                    type Appended = ($StructFlagAs<$fdata,_F>, _A);
                 }
-                impl<_F> $crate::r#struct::PiecewiseSimplify<()> for $StructInitAs<$fdata,_F> {
-                    type Combined = $StructInitAs<$fdata,_F>;
+                impl<_F> $crate::r#struct::PiecewiseSimplify<()> for $StructFlagAs<$fdata,_F> {
+                    type Combined = $StructFlagAs<$fdata,_F>;
                     type Remainder = ();
                 }
-                impl<_F: $crate::r#struct::InitFlag, _G: $crate::r#struct::CombineFlag<_F>> $crate::r#struct::PiecewiseSimplify<$StructInitAs<$fdata,_F>> for $StructInitAs<$fdata,_G> {
-                    type Combined = $StructInitAs<$fdata, _G::Combined>;
+                impl<_F: $crate::r#struct::StructFlag, _G: $crate::r#struct::CombineFlag<_F>> $crate::r#struct::PiecewiseSimplify<$StructFlagAs<$fdata,_F>> for $StructFlagAs<$fdata,_G> {
+                    type Combined = $StructFlagAs<$fdata, _G::Combined>;
                     type Remainder = ();
                 }
                 $(
-                    impl<__InitFlag: $crate::r#struct::InitFlag> $crate::r#struct::InitField<$Struct, $otherf> for $StructInitAs<$fdata, __InitFlag> {
+                    impl<__StructFlag: $crate::r#struct::StructFlag> $crate::r#struct::FieldFlag<$Struct, $otherf> for $StructFlagAs<$fdata, __StructFlag> {
                         type Flag = ();
                     }
-                    impl<_F, _G> $crate::r#struct::PiecewiseSimplify<$StructInitAs<$fdata, _F>> for $StructInitAs<$otherf, _G> {
-                        type Combined = $StructInitAs<$otherf, _G>;
-                        type Remainder = $StructInitAs<$fdata, _F>;
+                    impl<_F, _G> $crate::r#struct::PiecewiseSimplify<$StructFlagAs<$fdata, _F>> for $StructFlagAs<$otherf, _G> {
+                        type Combined = $StructFlagAs<$otherf, _G>;
+                        type Remainder = $StructFlagAs<$fdata, _F>;
                     }
                 )*
                 $(
-                    impl<__InitFlag: $crate::r#struct::InitFlag> $crate::r#struct::InitSubstruct<$Struct, $substruct> for $StructInitAs<$fdata, __InitFlag> {
+                    impl<__StructFlag: $crate::r#struct::StructFlag> $crate::r#struct::SubstructFlag<$Struct, $substruct> for $StructFlagAs<$fdata, __StructFlag> {
                         type Actions = ();
                     }
-                    impl<_F, _G> $crate::r#struct::PiecewiseSimplify<$StructInitAs<$fdata, _F>> for $StructInitAs<$substruct, _G> {
-                        type Combined = $StructInitAs<$substruct, _G>;
-                        type Remainder = $StructInitAs<$fdata, _F>;
+                    impl<_F, _G> $crate::r#struct::PiecewiseSimplify<$StructFlagAs<$fdata, _F>> for $StructFlagAs<$substruct, _G> {
+                        type Combined = $StructFlagAs<$substruct, _G>;
+                        type Remainder = $StructFlagAs<$fdata, _F>;
                     }
                 )*
                 $(
-                    impl<_F> $crate::r#struct::PiecewiseSimplify<$StructInitAs<$fdata, _F>> for $fact {
+                    impl<_F> $crate::r#struct::PiecewiseSimplify<$StructFlagAs<$fdata, _F>> for $fact {
                         type Combined = $fact;
-                        type Remainder = $StructInitAs<$fdata, _F>;
+                        type Remainder = $StructFlagAs<$fdata, _F>;
                     }
                 )*
             )*
             $vis struct $StructSubstructData;
             $(
                 $vis struct $sdata;
-                $crate::struct_assoc_type!(impl $Struct::Fields::$s for $StructFieldData = $sdata);
-                impl $crate::r#struct::SubstructOf<$Struct> for $sdata {
+                $crate::struct_assoc_type!(impl $Struct::Substructs::$s for $StructFieldData = $sdata);
+                impl $crate::r#struct::Substruct for $sdata {
+                    type Of = $Struct;
                     type Type = $sty;
                     fn get_field(
                         __field: $crate::arcmap::ArcMap<$StructContent>
@@ -906,37 +903,37 @@ macro_rules! __shareable_struct_main {
                         __field.map(|__field| &__field.$s)
                     }
                 }
-                impl<__Actions: $crate::r#struct::ActionsFor<$sty>> $crate::r#struct::InitSubstruct<$Struct, $sdata> for $StructInitAs<$sdata, __Actions> {
+                impl<__Actions: $crate::r#struct::ActionsFor<$sty>> $crate::r#struct::SubstructFlag<$Struct, $sdata> for $StructFlagAs<$sdata, __Actions> {
                     type Actions = __Actions;
                 }
-                impl<_F> $crate::r#struct::Simple for $StructInitAs<$sdata,_F> {}
-                impl<_A, _F> $crate::r#struct::Append<_A> for $StructInitAs<$sdata,_F> {
-                    type Appended = ($StructInitAs<$sdata,_F>, _A);
+                impl<_F> $crate::r#struct::Simple for $StructFlagAs<$sdata,_F> {}
+                impl<_A, _F> $crate::r#struct::Append<_A> for $StructFlagAs<$sdata,_F> {
+                    type Appended = ($StructFlagAs<$sdata,_F>, _A);
                 }
-                impl<_F> $crate::r#struct::PiecewiseSimplify<()> for $StructInitAs<$sdata,_F> {
-                    type Combined = $StructInitAs<$sdata,_F>;
+                impl<_F> $crate::r#struct::PiecewiseSimplify<()> for $StructFlagAs<$sdata,_F> {
+                    type Combined = $StructFlagAs<$sdata,_F>;
                     type Remainder = ();
                 }
-                impl<_F: $crate::r#struct::ActionsFor<$sty>, _G: $crate::r#struct::ActionsFor<$sty> + $crate::r#struct::LASimplify<_F>> $crate::r#struct::PiecewiseSimplify<$StructInitAs<$sdata,_F>> for $StructInitAs<$sdata,_G> {
-                    type Combined = $StructInitAs<$sdata, _G::LASimplified>;
+                impl<_F: $crate::r#struct::ActionsFor<$sty>, _G: $crate::r#struct::ActionsFor<$sty> + $crate::r#struct::LASimplify<_F>> $crate::r#struct::PiecewiseSimplify<$StructFlagAs<$sdata,_F>> for $StructFlagAs<$sdata,_G> {
+                    type Combined = $StructFlagAs<$sdata, _G::LASimplified>;
                     type Remainder = ();
                 }
                 $(
-                    impl<_F: 'static> $crate::r#struct::InitSubstruct<$Struct, $others> for $StructInitAs<$sdata,_F> {
+                    impl<_F: 'static> $crate::r#struct::SubstructFlag<$Struct, $others> for $StructFlagAs<$sdata,_F> {
                         type Actions = ();
                     }
-                    impl<_F: 'static, _G: 'static> $crate::r#struct::PiecewiseSimplify<$StructInitAs<$sdata, _F>> for $StructInitAs<$others, _G> {
-                        type Combined = $StructInitAs<$others, _G>;
-                        type Remainder = $StructInitAs<$sdata, _F>;
+                    impl<_F: 'static, _G: 'static> $crate::r#struct::PiecewiseSimplify<$StructFlagAs<$sdata, _F>> for $StructFlagAs<$others, _G> {
+                        type Combined = $StructFlagAs<$others, _G>;
+                        type Remainder = $StructFlagAs<$sdata, _F>;
                     }
                 )*
                 $(
-                    impl<_F: 'static> $crate::r#struct::InitField<$Struct, $field> for $StructInitAs<$sdata,_F> {
+                    impl<_F: 'static> $crate::r#struct::FieldFlag<$Struct, $field> for $StructFlagAs<$sdata,_F> {
                         type Flag = ();
                     }
-                    impl<_F, _G> $crate::r#struct::PiecewiseSimplify<$StructInitAs<$sdata, _F>> for $StructInitAs<$field, _G> {
-                        type Combined = $StructInitAs<$field, _G>;
-                        type Remainder = $StructInitAs<$sdata, _F>;
+                    impl<_F, _G> $crate::r#struct::PiecewiseSimplify<$StructFlagAs<$sdata, _F>> for $StructFlagAs<$field, _G> {
+                        type Combined = $StructFlagAs<$field, _G>;
+                        type Remainder = $StructFlagAs<$sdata, _F>;
                     }
                 )*
             )*
@@ -945,7 +942,7 @@ macro_rules! __shareable_struct_main {
                   vis: [$vis]
                   struct: $Struct
                   actiondata: $StructActionData
-                  initas: $StructInitAs
+                  flagas: $StructFlagAs
                   name: [$($aty)?]
                   marker: [$($atymarker)?]
                   actions: [$abody]
@@ -954,26 +951,26 @@ macro_rules! __shareable_struct_main {
                   other: [$($othera)*]
               );
             )*
-            $vis struct $StructInitAs<__FieldMarker, __ActionOrFlag>(std::marker::PhantomData<(__FieldMarker, __ActionOrFlag)>);
-            impl<__FieldMarker, __ActionOrFlag> Default for $StructInitAs<__FieldMarker, __ActionOrFlag> {
+            $vis struct $StructFlagAs<__FieldMarker, __ActionOrFlag>(std::marker::PhantomData<(__FieldMarker, __ActionOrFlag)>);
+            impl<__FieldMarker, __ActionOrFlag> Default for $StructFlagAs<__FieldMarker, __ActionOrFlag> {
                 fn default() -> Self {
                     Self(std::marker::PhantomData)
                 }
             }
             impl<
-                __Actions: $StructActions $(+ $crate::r#struct::InitField<$Struct,$fdata>)* $(+ $crate::r#struct::InitSubstruct<$Struct,$sdata>)*,
-                __ImpliedActions: $StructActions $(+ $crate::r#struct::InitField<$Struct,$fdata>)* $(+ $crate::r#struct::InitSubstruct<$Struct,$sdata>)*,
-            > $crate::r#struct::Implies<$StructInitAs<$Struct, __ImpliedActions>> for $StructInitAs<$Struct, __Actions>
+                __Actions: $StructActions $(+ $crate::r#struct::FieldFlag<$Struct,$fdata>)* $(+ $crate::r#struct::SubstructFlag<$Struct,$sdata>)*,
+                __ImpliedActions: $StructActions $(+ $crate::r#struct::FieldFlag<$Struct,$fdata>)* $(+ $crate::r#struct::SubstructFlag<$Struct,$sdata>)*,
+            > $crate::r#struct::Implies<$StructFlagAs<$Struct, __ImpliedActions>> for $StructFlagAs<$Struct, __Actions>
             where
-                $(<__Actions as $crate::r#struct::InitField<$Struct, $fdata>>::Flag: $crate::r#struct::Implies<<__ImpliedActions as $crate::r#struct::InitField<$Struct, $fdata>>::Flag>,)*
-                $(<$sty as $crate::r#struct::ShareableStruct>::InitAs<$sty, <__Actions as $crate::r#struct::InitSubstruct<$Struct, $sdata>>::Actions>:
-                    $crate::r#struct::Implies<<$sty as $crate::r#struct::ShareableStruct>::InitAs<$sty, <__ImpliedActions as $crate::r#struct::InitSubstruct<$Struct, $sdata>>::Actions>>,
+                $(<__Actions as $crate::r#struct::FieldFlag<$Struct, $fdata>>::Flag: $crate::r#struct::Implies<<__ImpliedActions as $crate::r#struct::FieldFlag<$Struct, $fdata>>::Flag>,)*
+                $(<$sty as $crate::r#struct::ShareableStruct>::FlagAs<$sty, <__Actions as $crate::r#struct::SubstructFlag<$Struct, $sdata>>::Actions>:
+                    $crate::r#struct::Implies<<$sty as $crate::r#struct::ShareableStruct>::FlagAs<$sty, <__ImpliedActions as $crate::r#struct::SubstructFlag<$Struct, $sdata>>::Actions>>,
                 )*
             {
             }
             impl<__Actions: $StructActions, __ImpliedActions: $StructActions> std::convert::AsRef<$Struct<__ImpliedActions>> for $Struct<__Actions>
             where
-                $StructInitAs<$Struct, __Actions>: $crate::r#struct::Implies<$StructInitAs<$Struct, __ImpliedActions>>
+                $StructFlagAs<$Struct, __Actions>: $crate::r#struct::Implies<$StructFlagAs<$Struct, __ImpliedActions>>
             {
                 #[allow(clippy::transmute_ptr_to_ptr)]
                 fn as_ref(&self) -> &$Struct<__ImpliedActions> {
@@ -989,9 +986,9 @@ macro_rules! __shareable_struct_main {
                 type FieldData = $StructFieldData;
                 type SubstructData = $StructSubstructData;
                 type ActionData = $StructActionData;
-                type InitAs<__FieldMarker, __ActionOrFlag> = $StructInitAs<__FieldMarker, __ActionOrFlag>;
+                type FlagAs<__FieldMarker, __ActionOrFlag> = $StructFlagAs<__FieldMarker, __ActionOrFlag>;
             }
-            impl<__Actions: Default $(+ $crate::r#struct::InitField<$Struct,$fdata>)* $(+ $crate::r#struct::InitSubstruct<$Struct,$sdata>)*>
+            impl<__Actions: Default $(+ $crate::r#struct::FieldFlag<$Struct,$fdata>)* $(+ $crate::r#struct::SubstructFlag<$Struct,$sdata>)*>
                 $StructActions for __Actions
             {
             }
@@ -999,21 +996,21 @@ macro_rules! __shareable_struct_main {
                 type WithActions = $Struct<__Actions>;
                 fn use_(listener: (usize, std::sync::Arc<dyn Send + Sync + Fn()>), content: $crate::arcmap::ArcMap<$StructContent>) -> $Struct<__Actions> {
                     $Struct {
-                        $($f: <<__Actions as $crate::r#struct::InitField<$Struct, $fdata>>::Flag as $crate::r#struct::InitFlag>::init(listener.clone(), content.clone().map(|c| &c.$f)),)*
-                        $($s: <<__Actions as $crate::r#struct::InitSubstruct<$Struct, $sdata>>::Actions as $crate::r#struct::ActionsFor<$sty>>::use_(listener.clone(), content.clone().map(|c| &c.$s)),)*
+                        $($f: <<__Actions as $crate::r#struct::FieldFlag<$Struct, $fdata>>::Flag as $crate::r#struct::StructFlag>::init(listener.clone(), content.clone().map(|c| &c.$f)),)*
+                        $($s: <<__Actions as $crate::r#struct::SubstructFlag<$Struct, $sdata>>::Actions as $crate::r#struct::ActionsFor<$sty>>::use_(listener.clone(), content.clone().map(|c| &c.$s)),)*
                         __actions: std::marker::PhantomData,
                     }
                 }
             }
-            impl<__Actions: $StructActions $(+ $crate::r#struct::InitField<$Struct,$fdata>)* $(+ $crate::r#struct::InitSubstruct<$Struct,$sdata>)*> $crate::r#struct::HasWriteActions<__Actions> for $Struct
+            impl<__Actions: $StructActions $(+ $crate::r#struct::FieldFlag<$Struct,$fdata>)* $(+ $crate::r#struct::SubstructFlag<$Struct,$sdata>)*> $crate::r#struct::HasWriteActions<__Actions> for $Struct
             where
-                $(<__Actions as $crate::r#struct::InitField<$Struct, $fdata>>::Flag: $crate::r#struct::ShareFlag,)*
-                $(<__Actions as $crate::r#struct::InitSubstruct<$Struct, $sdata>>::Actions: $crate::r#struct::WriteActionsFor<$sty>,)*
+                $(<__Actions as $crate::r#struct::FieldFlag<$Struct, $fdata>>::Flag: $crate::r#struct::ShareFlag,)*
+                $(<__Actions as $crate::r#struct::SubstructFlag<$Struct, $sdata>>::Actions: $crate::r#struct::WriteActionsFor<$sty>,)*
             {
                 fn share(content: $crate::arcmap::ArcMap<$StructContent>) -> $Struct<__Actions> {
                     $Struct {
-                        $($f: <<__Actions as $crate::r#struct::InitField<$Struct, $fdata>>::Flag as $crate::r#struct::ShareFlag>::share(content.clone().map(|c| &c.$f)),)*
-                        $($s: <<__Actions as $crate::r#struct::InitSubstruct<$Struct, $sdata>>::Actions as $crate::r#struct::WriteActionsFor<$sty>>::share(content.clone().map(|c| &c.$s)),)*
+                        $($f: <<__Actions as $crate::r#struct::FieldFlag<$Struct, $fdata>>::Flag as $crate::r#struct::ShareFlag>::share(content.clone().map(|c| &c.$f)),)*
+                        $($s: <<__Actions as $crate::r#struct::SubstructFlag<$Struct, $sdata>>::Actions as $crate::r#struct::WriteActionsFor<$sty>>::share(content.clone().map(|c| &c.$s)),)*
                         __actions: std::marker::PhantomData,
                     }
                 }
@@ -1028,7 +1025,7 @@ pub trait ShareableStruct: Sized {
     type FieldData;
     type SubstructData;
     type ActionData;
-    type InitAs<A, B>: Default;
+    type FlagAs<A, B>: Default;
 }
 pub trait Static: ShareableStruct {
     fn r#static(
@@ -1086,28 +1083,30 @@ impl<A: 'static + Default, S: HasWriteActions<A>> WriteActionsFor<S> for A {
     }
 }
 pub trait Implies<A> {}
-impl<F: InitFlag, G: sealed::ImpliesFlag<F>> Implies<F> for G {}
+impl<F: StructFlag, G: sealed::ImpliesFlag<F>> Implies<F> for G {}
 
-pub trait FieldOf<S: ShareableStruct> {
+pub trait Field {
+    type Of: ShareableStruct;
     type Type: 'static + Send + Sync;
     fn get_field(
-        f: crate::arcmap::ArcMap<S::Content>,
+        f: crate::arcmap::ArcMap<<Self::Of as ShareableStruct>::Content>,
     ) -> crate::arcmap::ArcMap<crate::shared::Link<Self::Type>>;
 }
-pub trait SubstructOf<S: ShareableStruct> {
+pub trait Substruct {
+    type Of: ShareableStruct;
     type Type: ShareableStruct;
     fn get_field(
-        f: crate::arcmap::ArcMap<S::Content>,
+        f: crate::arcmap::ArcMap<<Self::Of as ShareableStruct>::Content>,
     ) -> crate::arcmap::ArcMap<<Self::Type as ShareableStruct>::Content>;
 }
 
-pub trait InitField<S: ShareableStruct, F: FieldOf<S>>: 'static {
-    type Flag: InitFlag;
+pub trait FieldFlag<S: ShareableStruct, F: Field<Of = S>>: 'static {
+    type Flag: StructFlag;
 }
-impl<S: ShareableStruct, F: FieldOf<S>> InitField<S, F> for () {
+impl<S: ShareableStruct, F: Field<Of = S>> FieldFlag<S, F> for () {
     type Flag = ();
 }
-impl<S: ShareableStruct, F: FieldOf<S>, A: InitField<S, F>, B: InitField<S, F>> InitField<S, F>
+impl<S: ShareableStruct, F: Field<Of = S>, A: FieldFlag<S, F>, B: FieldFlag<S, F>> FieldFlag<S, F>
     for (A, B)
 where
     A::Flag: CombineFlag<B::Flag>,
@@ -1115,17 +1114,17 @@ where
     type Flag = <A::Flag as sealed::CombineFlag<B::Flag>>::Combined;
 }
 
-pub trait InitSubstruct<S: ShareableStruct, U: SubstructOf<S>>: 'static {
+pub trait SubstructFlag<S: ShareableStruct, U: Substruct<Of = S>>: 'static {
     type Actions: ActionsFor<U::Type>;
 }
-impl<S: ShareableStruct, U: SubstructOf<S>> InitSubstruct<S, U> for ()
+impl<S: ShareableStruct, U: Substruct<Of = S>> SubstructFlag<S, U> for ()
 where
     (): ActionsFor<U::Type>,
 {
     type Actions = ();
 }
-impl<S: ShareableStruct, U: SubstructOf<S>, A: InitSubstruct<S, U>, B: InitSubstruct<S, U>>
-    InitSubstruct<S, U> for (A, B)
+impl<S: ShareableStruct, U: Substruct<Of = S>, A: SubstructFlag<S, U>, B: SubstructFlag<S, U>>
+    SubstructFlag<S, U> for (A, B)
 where
     (A::Actions, B::Actions): Simplify,
     <(A::Actions, B::Actions) as Simplify>::Simplified: ActionsFor<U::Type>,
@@ -1134,13 +1133,13 @@ where
 }
 
 mod sealed {
-    pub trait InitFlag: 'static + Sized {
+    pub trait StructFlag: 'static + Sized {
         fn _init<T: 'static + Send + Sync>(
             listener: (usize, std::sync::Arc<dyn Send + Sync + Fn()>),
             link: crate::arcmap::ArcMap<crate::shared::Link<T>>,
         ) -> Option<crate::shared::Shared<T, Self>>;
     }
-    impl InitFlag for () {
+    impl StructFlag for () {
         fn _init<T: 'static + Send + Sync>(
             _listener: (usize, std::sync::Arc<dyn Send + Sync + Fn()>),
             _link: crate::arcmap::ArcMap<crate::shared::Link<T>>,
@@ -1148,7 +1147,7 @@ mod sealed {
             None
         }
     }
-    impl InitFlag for crate::W {
+    impl StructFlag for crate::W {
         fn _init<T: 'static + Send + Sync>(
             listener: (usize, std::sync::Arc<dyn Send + Sync + Fn()>),
             link: crate::arcmap::ArcMap<crate::shared::Link<T>>,
@@ -1161,7 +1160,7 @@ mod sealed {
             ))
         }
     }
-    impl InitFlag for crate::RW {
+    impl StructFlag for crate::RW {
         fn _init<T: 'static + Send + Sync>(
             listener: (usize, std::sync::Arc<dyn Send + Sync + Fn()>),
             link: crate::arcmap::ArcMap<crate::shared::Link<T>>,
@@ -1193,8 +1192,8 @@ mod sealed {
             Some(crate::shared::Static::_share(link))
         }
     }
-    pub trait CombineFlag<Rhs: InitFlag>: InitFlag {
-        type Combined: InitFlag;
+    pub trait CombineFlag<Rhs: StructFlag>: StructFlag {
+        type Combined: StructFlag;
     }
     impl CombineFlag<()> for () {
         type Combined = ();
@@ -1224,19 +1223,19 @@ mod sealed {
         type Combined = crate::RW;
     }
 
-    pub trait ImpliesFlag<F: InitFlag>: InitFlag {}
-    impl<F: InitFlag> ImpliesFlag<()> for F {}
+    pub trait ImpliesFlag<F: StructFlag>: StructFlag {}
+    impl<F: StructFlag> ImpliesFlag<()> for F {}
     impl ImpliesFlag<crate::W> for crate::W {}
     impl ImpliesFlag<crate::W> for crate::RW {}
     impl ImpliesFlag<crate::RW> for crate::RW {}
 }
-pub trait InitFlag: sealed::InitFlag {
+pub trait StructFlag: sealed::StructFlag {
     fn init<T: 'static + Send + Sync>(
         listener: (usize, std::sync::Arc<dyn Send + Sync + Fn()>),
         link: crate::arcmap::ArcMap<crate::shared::Link<T>>,
     ) -> Option<crate::shared::Shared<T, Self>>;
 }
-impl<F: sealed::InitFlag> InitFlag for F {
+impl<F: sealed::StructFlag> StructFlag for F {
     fn init<T: 'static + Send + Sync>(
         listener: (usize, std::sync::Arc<dyn Send + Sync + Fn()>),
         link: crate::arcmap::ArcMap<crate::shared::Link<T>>,
@@ -1257,8 +1256,8 @@ impl<F: sealed::ShareFlag> ShareFlag for F {
     }
 }
 
-pub trait CombineFlag<F: InitFlag>: sealed::CombineFlag<F> {}
-impl<F: InitFlag, G: sealed::CombineFlag<F>> CombineFlag<F> for G {}
+pub trait CombineFlag<F: StructFlag>: sealed::CombineFlag<F> {}
+impl<F: StructFlag, G: sealed::CombineFlag<F>> CombineFlag<F> for G {}
 
 pub trait Simple {}
 impl Simple for () {}
@@ -1332,12 +1331,12 @@ where
 #[allow(clippy::module_name_repetitions)]
 macro_rules! struct_actions {
     ($Struct:ty { $field:ident: $flag:ident$(, $($($bod:tt)+)?)? }) => {
-        (<$Struct as $crate::r#struct::ShareableStruct>::InitAs<$crate::r#struct_assoc_type!({$Struct}::Fields::$field), $crate::$flag>$($(, $crate::struct_actions!($Struct { $($bod)* }))?)?)
+        (<$Struct as $crate::r#struct::ShareableStruct>::FlagAs<$crate::r#struct_assoc_type!({$Struct}::Fields::$field), $crate::$flag>$($(, $crate::struct_actions!($Struct { $($bod)* }))?)?)
     };
     ($Struct:ty { |$field:ident: {$($flags:tt)*}$(, $($($bod:tt)+)?)? }) => {
-        (<$Struct as $crate::r#struct::ShareableStruct>::InitAs<
-            $crate::r#struct_assoc_type!({$Struct}::Fields::$field),
-            $crate::struct_actions!(<$crate::struct_assoc_type!({$Struct}::Fields::$field) as $crate::r#struct::SubstructOf<$Struct>>::Type {$($flags)*})
+        (<$Struct as $crate::r#struct::ShareableStruct>::FlagAs<
+            $crate::r#struct_assoc_type!({$Struct}::Substructs::$field),
+            $crate::struct_actions!(<$crate::struct_assoc_type!({$Struct}::Substructs::$field) as $crate::r#struct::Substruct>::Type {$($flags)*})
         >$($(, $crate::struct_actions!($Struct { $($bod)* }))?)?)
     };
     ($Struct:ty { $A:ident$(, $($($bod:tt)+)?)? }) => {
@@ -1352,14 +1351,14 @@ macro_rules! __alias_actions {
     ( vis: [$vis:vis]
       struct: $Struct:ident
       actiondata: $StructActionData:ident
-      initas: $StructInitAs:ident
+      flagas: $StructFlagAs:ident
       name: []
       $($r:tt)*
     ) => {};
     ( vis: [$vis:vis]
       struct: $Struct:ident
       actiondata: $StructActionData:ident
-      initas: $StructInitAs:ident
+      flagas: $StructFlagAs:ident
       name: [$a:ident]
       marker: [$m:ident]
       actions: [$ty:ty]
@@ -1370,11 +1369,11 @@ macro_rules! __alias_actions {
         #[derive(Default)]
         $vis struct $m;
         $crate::struct_assoc_type!(impl $Struct::Actions::$a for $StructActionData = $m);
-        $(impl $crate::r#struct::InitField<$Struct, $field> for $a {
-            type Flag = <$ty as $crate::r#struct::InitField<$Struct, $field>>::Flag;
+        $(impl $crate::r#struct::FieldFlag<$Struct, $field> for $a {
+            type Flag = <$ty as $crate::r#struct::FieldFlag<$Struct, $field>>::Flag;
         })*
-        $(impl $crate::r#struct::InitSubstruct<$Struct, $substruct> for $a {
-            type Actions = <$ty as $crate::r#struct::InitSubstruct<$Struct, $substruct>>::Actions;
+        $(impl $crate::r#struct::SubstructFlag<$Struct, $substruct> for $a {
+            type Actions = <$ty as $crate::r#struct::SubstructFlag<$Struct, $substruct>>::Actions;
         })*
         impl $crate::r#struct::Simple for $m {}
         impl<_A> $crate::r#struct::Append<_A> for $m {
@@ -1388,8 +1387,8 @@ macro_rules! __alias_actions {
             type Combined = $m;
             type Remainder = ();
         }
-        impl<__FieldMarker, __ActionOrFlag> $crate::r#struct::PiecewiseSimplify<$m> for $StructInitAs<__FieldMarker, __ActionOrFlag> {
-            type Combined = $StructInitAs<__FieldMarker, __ActionOrFlag>;
+        impl<__FieldMarker, __ActionOrFlag> $crate::r#struct::PiecewiseSimplify<$m> for $StructFlagAs<__FieldMarker, __ActionOrFlag> {
+            type Combined = $StructFlagAs<__FieldMarker, __ActionOrFlag>;
             type Remainder = $m;
         }
     };
