@@ -10,6 +10,7 @@ use crate::shared::{Link, Shareable, Shared};
 /// to get updated only when the specific list items they use are changed.
 ///
 /// ```rust
+/// # fn main() {}
 /// # use dioxus::prelude::*;
 /// use dioxus_shareables::{shareable, List, ListEntry};
 ///

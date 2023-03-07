@@ -8,6 +8,7 @@ pub mod assoc_type;
 ///
 /// The basic syntax is as follows:
 /// ```
+///     # fn main() {}
 ///     use dioxus_shareables::shareable_struct;
 ///     shareable_struct! {
 ///         pub static struct GlobalState {
@@ -32,6 +33,7 @@ pub mod assoc_type;
 /// struct. When we use the struct, we then have to declare which actions we need:
 ///
 /// ```
+///     # fn main() {}
 ///     # use dioxus::prelude::*;
 ///     # use dioxus_shareables::shareable_struct;
 ///     # shareable_struct! {
@@ -69,6 +71,7 @@ pub mod assoc_type;
 /// Of course, there's not a lot of point to grouping shared variables into a type if we don't
 /// implement some methods on the type. This is where the types on the actions come in:
 /// ```
+///     # fn main() {}
 ///     # use dioxus::prelude::*;
 ///     # use dioxus_shareables::shareable_struct;
 ///     # shareable_struct! {
@@ -127,6 +130,7 @@ pub mod assoc_type;
 /// You don't need to declare actions in advance to use them; in particular, you may decide you
 /// want to use one-off action declarations on method declarations:
 /// ```
+///     # fn main() {}
 ///     # use dioxus::prelude::*;
 ///     # use dioxus_shareables::shareable_struct;
 ///     # shareable_struct! {
@@ -176,6 +180,7 @@ pub mod assoc_type;
 /// wants to declare a Substruct without the `static` keyword (so that there is no global instance
 /// of the type, just the ones that appear as substructures).
 /// ```
+///     # fn main() {}
 ///     # use dioxus::prelude::*;
 ///     use dioxus_shareables::shareable_struct;
 ///     shareable_struct! {
@@ -228,6 +233,7 @@ pub mod assoc_type;
 /// structs contained in one shareable struct) can be acheived using the associated Shareable type.
 ///
 /// ```
+///     # fn main() {}
 ///     # use dioxus::prelude::*;
 ///     use dioxus_shareables::{shareable_struct, struct_actions, struct_assoc_type};
 ///     shareable_struct! {
@@ -839,8 +845,8 @@ macro_rules! __shareable_struct_main {
                 $(fn $f(&mut self) -> Option<$fty>;)*
                 $(fn $s(&mut self) -> Option<<$sty as $crate::r#struct::ShareableStruct>::Content>;)*
             }
-            impl<A: $StructInitializer> From<A> for $StructContent {
-                fn from(mut a: A) -> Self {
+            impl<_Initializer: $StructInitializer> From<_Initializer> for $StructContent {
+                fn from(mut a: _Initializer) -> Self {
                     Self {
                         $($f: $crate::shared::Link::new(a.$f().unwrap_or_else(|| $finit)),)*
                         $($s: a.$s().unwrap_or_default(),)*

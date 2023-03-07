@@ -6,11 +6,13 @@
 //! NOTE: The type of the shared data must be `Send + Sync`.
 //!
 //! ```rust
+//! # fn main() {}
 //! # use dioxus::prelude::*;
 //! use dioxus_shareables::shareable;
 //!
 //! shareable!(Var: usize = 900);
 //!
+//! # #[allow(clippy::must_use_candidate)]
 //! #[allow(non_snake_case)]
 //! pub fn Reader(cx: Scope) -> Element {
 //!     let r = *Var.use_rw(cx).read(); // this component will update when Var changes.
@@ -19,6 +21,7 @@
 //!     })
 //! }
 //!
+//! # #[allow(clippy::must_use_candidate)]
 //! #[allow(non_snake_case)]
 //! pub fn Writer(cx: Scope) -> Element {
 //!     let w1 = Var.use_w(cx); // this component writes to Var, but does not get updated when Var
@@ -128,13 +131,16 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Shareable<T> {
 ///
 /// _Example:_
 /// ```
+/// # fn main() {}
 /// # use dioxus::prelude::*;
 /// dioxus_shareables::shareable!(#[doc(hidden)] Var: usize = 900); // Declares a type Var which can be used to
 ///                                                                 // access the global.
 ///
+/// # #[allow(clippy::similar_names)]
 /// fn component(cx: Scope) -> Element {
-///     let rw_hook = Var.use_rw(cx);
-///     let w_hook = Var.use_w(cx);
+///     let rw_hook = Var.use_rw(cx); // marks the component for update when the value changes.
+///     let w_hook = Var.use_w(cx); // alternatively, access/change the value but don't update when
+///                                 // the value changes.
 ///     // ...
 ///     # cx.render(rsx! {div {}})
 /// }
