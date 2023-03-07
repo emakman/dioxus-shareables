@@ -786,8 +786,8 @@ macro_rules! __shareable_struct_main {
             }
         }
         impl<__Actions: $StructActions> $Struct<__Actions> {
-            $( fn $f(&self) -> &$crate::shared::Shared<$fty, <__Actions as $crate::r#struct::FieldFlag<$crate::struct_assoc_type!($Struct::Fields::$f)>>::Flag> {
-                   unimplemented!()
+            $( fn $f(&self) -> &$crate::shared::Shared<$fty, <__Actions as $crate::r#struct::FieldFlag<$crate::struct_assoc_type!($Struct::Fields::$f)>>::Flag> where __Actions::$fdata: $crate::Flag {
+                   self.$f.as_ref().unwrap()
                }
             )*
             #[allow(dead_code)]
@@ -803,6 +803,7 @@ macro_rules! __shareable_struct_main {
                 $(+ $crate::r#struct::FieldFlag<$crate::struct_assoc_type!($Struct::Fields::$f)>)*
                 $(+ $crate::r#struct::SubstructFlag<$crate::struct_assoc_type!($Struct::Substructs::$s)>)*
         {
+            $(type $fdata;)*
         }
         impl<__Actions: $StructActions> $crate::r#struct::ShareableStructWithActions for $Struct<__Actions> {
             type Base = $Struct;
@@ -1017,6 +1018,7 @@ macro_rules! __shareable_struct_main {
             impl<__Actions: Default $(+ $crate::r#struct::FieldFlag<$fdata>)* $(+ $crate::r#struct::SubstructFlag<$sdata>)*>
                 $StructActions for __Actions
             {
+                $(type $fdata = <__Actions as $crate::r#struct::FieldFlag<$fdata>>::Flag;)*
             }
             impl<__Actions: $StructActions> $crate::r#struct::HasActions<__Actions> for $Struct {
                 type WithActions = $Struct<__Actions>;
