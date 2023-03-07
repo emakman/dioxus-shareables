@@ -177,7 +177,7 @@ pub mod assoc_type;
 ///
 ///
 /// If you'd like, you can also organize your shared structure into substructures. One generally
-/// wants to declare a Substruct without the `static` keyword (so that there is no global instance
+/// wants to declare a substructure without the `static` keyword (so that there is no global instance
 /// of the type, just the ones that appear as substructures).
 /// ```
 ///     # fn main() {}
@@ -207,13 +207,18 @@ pub mod assoc_type;
 ///     // ...
 ///     shareable_struct! {
 ///         pub static struct ParentStruct {
-///             u: String = "Some silly string...".into(),
-///             v: u32 = 18,
-///             |s: Substruct,
-///             |t: Substruct, // N.B. `s` and `t` will point to different instances of `Substruct`.
+///             s: String = "Some silly string...".into(),
+///             t: u32 = 18,
+///             |u: Substruct,
+///             |v: Substruct, // N.B. `s` and `t` will point to different instances of `Substruct`.
+///             |w: Substruct = { // in fact, we can add separate initializers for substructs of
+///                               // of the same type.
+///                     a: 3,
+///                     b: 7,
+///                 },
 ///         }
-///         action UVA = {u: W, v: RW, |s: { a: RW, c: W }};
-///         action UBC = {u: W, |t: { A, B }}; // N.B. you can refer to actions `A` and `B` even though
+///         action UVA = {s: W, t: RW, |u: { a: RW, c: W }};
+///         action UBC = {s: W, |v: { A, B }}; // N.B. you can refer to actions `A` and `B` even though
 ///                                            // they aren't in scope. (Since they were defined in the
 ///                                            // initial definition of `Substruct`).
 ///     }
@@ -221,12 +226,26 @@ pub mod assoc_type;
 ///     #[allow(non_snake_case)]
 ///     fn Component(cx: Scope) -> Element {
 ///         let mgs = ParentStruct::use_::<UVA, _>(cx);
-///         mgs.s.clever_d_method(); // Works bcause action our mgs.s was initialized with the
+///         mgs.u.clever_d_method(); // Works bcause action our mgs.s was initialized with the
 ///                                  // `c: RW` (this is part of action `B`) and this implies
 ///                                  // action `D`.
 ///         // ...
 ///         # cx.render(rsx! { div {} })
 ///     }
+///     #
+///     # // We'll put the nested test here, so that it's with the rest, but we don't want it in
+///     # // the documentation.
+///     # shareable_struct! {
+///     #     pub static struct ParentParentStruct {
+///     #         m: usize = 3,
+///     #         |n: ParentStruct = {},
+///     #         |o: ParentStruct,
+///     #         |p: ParentStruct = {
+///     #             |u: { a: 7 },
+///     #             s: "usw...".into(),
+///     #         }
+///     #     }
+///     # }
 /// ```
 ///
 /// More complicated relationships between shareable structs (for example a collection of shareable
@@ -237,53 +256,55 @@ pub mod assoc_type;
 ///     # use dioxus::prelude::*;
 ///     use dioxus_shareables::{shareable_struct, struct_actions, struct_assoc_type};
 ///     shareable_struct! {
-///       pub struct Todo {
+///       pub struct Item {
 ///           priority: u32 = 0,
 ///           desc: String = "<DESCRIPTION HERE>".into(),
 ///           tags: Vec<String> = vec![],
 ///       }
-///       action CreateTodo = { priority: W, desc: W };
-///       action ShowTodo = { priority: RW, desc: RW, tags: RW };
+///       action CreateItem = { priority: W, desc: W };
+///       action ShowItem = { priority: RW, desc: RW, tags: RW };
 ///     }
 ///     // ...
 ///     shareable_struct! {
-///         pub static struct TodoList {
-///             title: String = "TODO".into(),
+///         pub static struct SharedList {
+///             title: String = "A List".into(),
 ///             author: String = "You".into(),
-///             todos: Vec<struct_assoc_type!(Todo::Shareable)> = vec![],
+///             items: Vec<struct_assoc_type!(Item::Shareable)> = vec![],
 ///         }
-///         action ReadAll = { title: RW, author: RW, todos: RW };
+///         action ReadAll = { title: RW, author: RW, items: RW };
 ///     }
 ///     // ...
-///     impl<A: TodoListActions> TodoList<A> {
-///         fn new_todo(&self, priority: u32, desc: String)
+///     impl<A: SharedListActions> SharedList<A> {
+///         fn add_item(&self, priority: u32, desc: String)
 ///         where
-///             Self: AsRef<TodoList<struct_actions!(TodoList { todos: W })>>
+///             Self: AsRef<SharedList<struct_actions!(SharedList { items: W })>>
 ///         {
-///             let new_todo = <struct_assoc_type!{Todo::Shareable}>::default();
-///             let e: Todo<CreateTodo> = new_todo.share();
-///             *e.desc().write() = desc;
-///             *e.priority().write() = priority;
-///             self.as_ref().todos().write().push(new_todo);
+///             // let new_todo =
+///             //    <struct_assoc_type!(Item::Shareable)>::default(); // Works, but not flexible.
+///             let new_todo = shareable_struct!(Item { // We can use `shareable_struct!` to
+///                 desc: desc,                         // initialize a new instance of a shareable
+///                 priority: priority                  // struct instead.
+///             });
+///             self.as_ref().items().write().push(new_todo);
 ///         }
 ///     }
 ///     // ...
 ///     # #[allow(non_snake_case)]
-///     fn TodoListComponent(cx: Scope) -> Element {
-///         let list: &TodoList<ReadAll> = TodoList::use_(cx);
+///     fn SharedListComponent(cx: Scope) -> Element {
+///         let list: &SharedList<ReadAll> = SharedList::use_(cx);
 ///         let title = list.title().read();
 ///         let author = list.author().read();
 ///         cx.render(rsx! {
-///             div { class: "todolisttitle", "{title}" }
-///             div { class: "todolistauthor", "{author}" }
-///             list.todos().read().iter().cloned().map(|todo| rsx! { TodoComponent { todo: todo } })
+///             div { class: "listtitle", "{title}" }
+///             div { class: "listauthor", "{author}" }
+///             list.items().read().iter().cloned().map(|todo| rsx! { ItemComponent { todo: todo } })
 ///         })
 ///     }
 ///     // ...
 ///     # #[allow(non_snake_case)]
 ///     #[inline_props]
-///     fn TodoComponent(cx: Scope, todo: struct_assoc_type!(Todo::Shareable)) -> Element {
-///         let todo: &Todo<ShowTodo> = todo.use_(cx); // = todo.use_::<Todo<ShowTodo>>(cx);
+///     fn ItemComponent(cx: Scope, todo: struct_assoc_type!(Item::Shareable)) -> Element {
+///         let todo: &Item<ShowItem> = todo.use_(cx); // = todo.use_::<Item<ShowItem>>(cx);
 ///         // ...
 ///         # cx.render(rsx! { div {} })
 ///     }
@@ -309,6 +330,7 @@ macro_rules! shareable_struct {
             actions: [$($actions)*]
         }
     };
+    ($Struct:ident {$($init:tt)*}) => {$crate::arcmap::ArcMap::new(<<$Struct as $crate::r#struct::ShareableStruct>::Content>::from($crate::struct_initializer!($Struct {$($init)*})))};
 }
 
 #[doc(hidden)]
@@ -333,6 +355,7 @@ macro_rules! __shareable_struct_parse_fields {
             vis: $svis:tt
             name: $s:ident
             ty: $sty:tt
+            init: $sinit:tt
             fields: [$($sf:ident)*]
             other: $sos:tt
             actions: []
@@ -371,6 +394,7 @@ macro_rules! __shareable_struct_parse_fields {
                     vis: $svis
                     name: $s
                     ty: $sty
+                    init: $sinit
                     fields: [$($sf)*$f]
                     other: $sos
                     actions: []
@@ -379,7 +403,7 @@ macro_rules! __shareable_struct_parse_fields {
             actions: $actions
         }
     };
-    ( unparsed_fields: [|$fvis:vis $f:ident: $fty:ty$(,$($unparsed:tt)*)?]
+    ( unparsed_fields: [|$fvis:vis $f:ident: $fty:ty = {$($finit:tt)*}$(,$($unparsed:tt)*)?]
       vis: $vis:tt
       static: $static:tt
       attr: $attr:tt
@@ -397,6 +421,7 @@ macro_rules! __shareable_struct_parse_fields {
           vis: $svis:tt
           name: $s:ident
           ty: $sty:tt
+          init: $sinit:tt
           fields: $sf:tt
           other: [$($sos:ident)*]
           actions: []
@@ -423,6 +448,7 @@ macro_rules! __shareable_struct_parse_fields {
                     vis: $svis
                     name: $s
                     ty: $sty
+                    init: $sinit
                     fields: $sf
                     other: [$($sos)*$f]
                     actions: []
@@ -431,6 +457,74 @@ macro_rules! __shareable_struct_parse_fields {
                     vis: [$fvis]
                     name: $f
                     ty: [$fty]
+                    init: [
+                        <
+                            <$fty as $crate::r#struct::ShareableStruct>::Content
+                        >::from($crate::struct_initializer!($fty { $($finit)* }))
+                    ]
+                    fields: [$($p)*]
+                    other: [$($s)*]
+                    actions: []
+                ]
+            ]
+            actions: $actions
+        }
+    };
+    ( unparsed_fields: [|$fvis:vis $f:ident: $fty:ty$(,$($unparsed:tt)*)?]
+      vis: $vis:tt
+      static: $static:tt
+      attr: $attr:tt
+      struct: $Struct:ident
+      fields: [$([
+          vis: $pvis:tt
+          name: $p:ident
+          type: $pty:tt
+          init: $pinit:tt
+          other: $pof:tt
+          substructs: [$($ps:ident)*]
+          actions: []
+      ])*]
+      substructs: [$([
+          vis: $svis:tt
+          name: $s:ident
+          ty: $sty:tt
+          init: $sinit:tt
+          fields: $sf:tt
+          other: [$($sos:ident)*]
+          actions: []
+      ])*]
+      actions: $actions:tt
+    ) => {
+        $crate::__shareable_struct_parse_fields! {
+            unparsed_fields: [$($($unparsed)*)?]
+            vis: $vis
+            static: $static
+            attr: $attr
+            struct: $Struct
+            fields: [$([
+                vis: $pvis
+                name: $p
+                type: $pty
+                init: $pinit
+                other: $pof
+                substructs: [$($ps)*$f]
+                actions: []
+            ])*]
+            substructs: [
+                $([
+                    vis: $svis
+                    name: $s
+                    ty: $sty
+                    init: $sinit
+                    fields: $sf
+                    other: [$($sos)*$f]
+                    actions: []
+                ])*
+                [
+                    vis: [$fvis]
+                    name: $f
+                    ty: [$fty]
+                    init: [Default::default()]
                     fields: [$($p)*]
                     other: [$($s)*]
                     actions: []
@@ -485,6 +579,7 @@ macro_rules! __shareable_struct_parse_actions {
               vis: $svis:tt
               name: $s:ident
               ty: $sty:tt
+              init: $sinit:tt
               fields: $field:tt
               other: $others:tt
               actions: [$($sact:tt)*]
@@ -517,6 +612,7 @@ macro_rules! __shareable_struct_parse_actions {
                     vis: $svis
                     name: $s
                     ty: $sty
+                    init: $sinit
                     fields: $field
                     other: $others
                     actions: [$($sact)*]
@@ -562,6 +658,7 @@ macro_rules! __shareable_struct_parse_actions {
              vis: $svis:tt
              name: $s:ident
              ty: $sty:tt
+             init: $sinit:tt
              fields: $field:tt
              other: $others:tt
              actions: [$($sact:tt)*]
@@ -594,6 +691,7 @@ macro_rules! __shareable_struct_parse_actions {
                     vis: $svis
                     name: $s
                     ty: $sty
+                    init: $sinit
                     fields: $field
                     other: $others
                     actions: [$($sact)*$aty]
@@ -636,6 +734,7 @@ macro_rules! __shareable_struct_parse_actions {
               vis: $svis:tt
               name: $s:ident
               ty: $sty:tt
+              init: $sinit:tt
               fields: [$($field:ident)*]
               other: [$($others:ident)*]
               actions: [$($sact:ident)*]
@@ -663,7 +762,6 @@ macro_rules! __shareable_struct_parse_actions {
                 actiondata: [<$Struct ActionData>]
                 flagas: [<$Struct FlagAs>]
                 initializer: [<$Struct Initializer>]
-                initwith: [<$Struct InitWith>]
                 fields: [$([
                     vis: $fvis
                     name: $f
@@ -679,6 +777,7 @@ macro_rules! __shareable_struct_parse_actions {
                     name: $s
                     marker: [<$Struct __ $s:camel>]
                     ty: $sty
+                    init: $sinit
                     fields: [$([<$Struct __ $field:camel>])*]
                     other: [$([<$Struct __ $others:camel>])*]
                     actions: [$([<$Struct Actions__ $sact>])*]
@@ -713,7 +812,6 @@ macro_rules! __shareable_struct_main {
       actiondata: $StructActionData:ident
       flagas: $StructFlagAs:ident
       initializer: $StructInitializer:ident
-      initwith: $StructInitWith:ident
       fields: [$([
                vis: [$fvis:vis]
                name: $f:ident
@@ -729,6 +827,7 @@ macro_rules! __shareable_struct_main {
              name: $s:ident
              marker: $sdata:ident
              ty: [$sty:ty]
+             init: [$sinit:expr]
              fields: [$($field:ident)*]
              other: [$($others:ident)*]
              actions: [$($sact:ident)*]
@@ -804,6 +903,8 @@ macro_rules! __shareable_struct_main {
                 self.as_ref()
             }
         }
+        #[doc = concat!("Actions on a [`", stringify!($Struct), "`]")]
+        #[doc = "See [`dioxus_shareables::shareable_struct`] for more info"]
         $vis trait $StructActions:
             Default
                 $(+ $crate::r#struct::FieldFlag<$crate::struct_assoc_type!($Struct::Fields::$f)>)*
@@ -842,8 +943,8 @@ macro_rules! __shareable_struct_main {
                 type For = $Struct;
             }
             $vis trait $StructInitializer {
-                $(fn $f(&mut self) -> Option<$fty>;)*
-                $(fn $s(&mut self) -> Option<<$sty as $crate::r#struct::ShareableStruct>::Content>;)*
+                $(fn $f(&mut self) -> Option<$fty> { None })*
+                $(fn $s(&mut self) -> Option<<$sty as $crate::r#struct::ShareableStruct>::Content> { None })*
             }
             impl<_Initializer: $StructInitializer> From<_Initializer> for $StructContent {
                 fn from(mut a: _Initializer) -> Self {
@@ -853,11 +954,8 @@ macro_rules! __shareable_struct_main {
                     }
                 }
             }
-            impl $StructInitializer for () {
-                $(fn $f(&mut self) -> Option<$fty> { None })*
-                $(fn $s(&mut self) -> Option<<$sty as $crate::r#struct::ShareableStruct>::Content> { None })*
-            }
-            impl<A: $StructInitializer, B: $StructInitializer> $StructInitializer for (A, B) {
+            impl $StructInitializer for () {}
+            impl<__Init1: $StructInitializer, __Init2: $StructInitializer> $StructInitializer for (__Init1, __Init2) {
                 $(fn $f(&mut self) -> Option<$fty> { self.0.$f().or_else(|| self.1.$f()) })*
                 $(fn $s(&mut self) -> Option<<$sty as $crate::r#struct::ShareableStruct>::Content> { self.0.$s().or_else(|| self.1.$s()) })*
             }
@@ -865,7 +963,7 @@ macro_rules! __shareable_struct_main {
                 fn default() -> Self {
                     Self {
                         $($f: $crate::shared::Link::new($finit),)*
-                        $($s: Default::default(),)*
+                        $($s: $sinit,)*
                     }
                 }
             }
@@ -922,6 +1020,9 @@ macro_rules! __shareable_struct_main {
                         type Remainder = $StructFlagAs<$fdata, _F>;
                     }
                 )*
+                impl<__Init: FnOnce() -> $fty> $StructInitializer for $crate::r#struct::Init<$fdata, __Init> {
+                    fn $f(&mut self) -> Option<$fty> { self.output() }
+                }
             )*
             $vis struct $StructSubstructData;
             $(
@@ -969,6 +1070,13 @@ macro_rules! __shareable_struct_main {
                         type Remainder = $StructFlagAs<$sdata, _F>;
                     }
                 )*
+                impl<__Init: Into<<$sty as $crate::r#struct::ShareableStruct>::Content>>
+                    $StructInitializer for $crate::r#struct::Init<$sdata, __Init>
+                {
+                    fn $s(&mut self) -> Option<<$sty as $crate::r#struct::ShareableStruct>::Content> {
+                        self.get_content()
+                    }
+                }
             )*
             $vis struct $StructActionData;
             $($crate::__alias_actions!(
@@ -1437,4 +1545,35 @@ impl<O, F, A: FnOnce() -> O> Init<F, A> {
     pub fn output(&mut self) -> Option<O> {
         self.1.take().map(|f| f())
     }
+}
+impl<F, A> Init<F, A> {
+    pub fn get_content<C: Content>(&mut self) -> Option<C>
+    where
+        A: Into<C>,
+    {
+        self.1.take().map(Into::into)
+    }
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! struct_initializer {
+    ($Struct:ty {}) => {
+        ()
+    };
+    ($Struct:ty {
+        $s:ident: $init:expr$(, $($r:tt)*)?
+    }) => {
+        (<$crate::r#struct::Init::<$crate::struct_assoc_type!({$Struct}::Fields::$s),_>>::from(|| $init), $crate::struct_initializer!($Struct {$($($r)*)?}))
+    };
+    ($Struct:ty {
+        |$s:ident: {$($init:tt)*}$(, $($r:tt)*)?
+    }) => {
+        (
+            <$crate::r#struct::Init::<$crate::struct_assoc_type!({$Struct}::Substructs::$s),_>>::from(
+                $crate::struct_initializer!(<$crate::struct_assoc_type!({$Struct}::Substructs::$s) as $crate::r#struct::Substruct>::Type {$($init)*})
+            ),
+            $crate::struct_initializer!($Struct {$($($r)*)?})
+        )
+    };
 }
