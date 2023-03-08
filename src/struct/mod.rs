@@ -928,7 +928,7 @@ macro_rules! __shareable_struct_main {
             " for more info."
         )]
         $vis trait $StructActions:
-            Default
+            'static + Default
                 $(+ $crate::r#struct::FieldFlag<$crate::struct_assoc_type!($Struct::Fields::$f)>)*
                 $(+ $crate::r#struct::SubstructFlag<$crate::struct_assoc_type!($Struct::Substructs::$s)>)*
         {
@@ -1155,7 +1155,7 @@ macro_rules! __shareable_struct_main {
                 type ActionData = $StructActionData;
                 type FlagAs<__FieldMarker, __ActionOrFlag> = $StructFlagAs<__FieldMarker, __ActionOrFlag>;
             }
-            impl<__Actions: Default $(+ $crate::r#struct::FieldFlag<$fdata>)* $(+ $crate::r#struct::SubstructFlag<$sdata>)*>
+            impl<__Actions: 'static + Default $(+ $crate::r#struct::FieldFlag<$fdata>)* $(+ $crate::r#struct::SubstructFlag<$sdata>)*>
                 $StructActions for __Actions
             {
                 $(type $fdata = <__Actions as $crate::r#struct::FieldFlag<$fdata>>::Flag;)*
