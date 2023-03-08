@@ -279,13 +279,13 @@ pub mod assoc_type;
 ///         where
 ///             Self: AsRef<SharedList<struct_actions!(SharedList { items: W })>>
 ///         {
-///             // let new_todo =
-///             //    <struct_assoc_type!(Item::Shareable)>::default(); // Works, but not flexible.
-///             let new_todo = shareable_struct!(Item { // We can use `shareable_struct!` to
-///                 desc: desc,                         // initialize a new instance of a shareable
-///                 priority: priority                  // struct instead.
+///             // let new_item = Item::new(); // This works, but it's inflexible.
+///             # let _fn_new_test: struct_assoc_type!(Item::Shareable) = Item::new();
+///             let new_item = shareable_struct!(Item { // We can use `shareable_struct!` to
+///                 desc: desc,                         // initialize a new instance of the data
+///                 priority: priority                  // instead.
 ///             });
-///             self.as_ref().items().write().push(new_todo);
+///             self.as_ref().items().write().push(new_item);
 ///         }
 ///     }
 ///     // ...
@@ -297,14 +297,14 @@ pub mod assoc_type;
 ///         cx.render(rsx! {
 ///             div { class: "listtitle", "{title}" }
 ///             div { class: "listauthor", "{author}" }
-///             list.items().read().iter().cloned().map(|todo| rsx! { ItemComponent { todo: todo } })
+///             list.items().read().iter().cloned().map(|item| rsx! { ItemComponent { item: item } })
 ///         })
 ///     }
 ///     // ...
 ///     # #[allow(non_snake_case)]
 ///     #[inline_props]
-///     fn ItemComponent(cx: Scope, todo: struct_assoc_type!(Item::Shareable)) -> Element {
-///         let todo: &Item<ShowItem> = todo.use_(cx); // = todo.use_::<Item<ShowItem>>(cx);
+///     fn ItemComponent(cx: Scope, item: struct_assoc_type!(Item::Shareable)) -> Element {
+///         let item: &Item<ShowItem> = item.use_(cx); // = item.use_::<Item<ShowItem>>(cx);
 ///         // ...
 ///         # cx.render(rsx! { div {} })
 ///     }
@@ -862,6 +862,8 @@ macro_rules! __shareable_struct_main {
                 if $is_static {
                     #[allow(dead_code)]
                     #[must_use]
+                    #[doc = concat!("Use [`", stringify!($Struct), "`] as a hook.")]
+                    #[doc = concat!("This should be the preferred method for using [`", stringify!($Struct), "`]")]
                     $vis fn use_<__Actions: $StructActions, P>(cx: $crate::reexported::Scope<P>) -> &$Struct<__Actions> {
                         let id = cx.scope_id().0;
                         cx.use_hook(||
@@ -871,6 +873,16 @@ macro_rules! __shareable_struct_main {
                             )
                         )
                     }
+                    #[doc = concat!("Use [`", stringify!($Struct), "`] without the hook.")]
+                    #[doc = concat!(
+                        "You should use this when you need to access ", stringify!($Struct),
+                        " in conditionally executed code and you cannot move the access to a wider context."
+                    )]
+                    #[doc = concat!(
+                        "See ",
+                        "[`dioxus_shareables::shareable_struct!`](`", stringify!($crate), "::shareable_struct!`)",
+                        " for more info."
+                    )]
                     #[allow(dead_code)]
                     #[must_use]
                     $vis fn share<__Actions: $StructActions>() -> $Struct<__Actions>
@@ -884,6 +896,12 @@ macro_rules! __shareable_struct_main {
                     }
                 }
             }
+            #[doc = concat!("Create a new instance of the underlying data for [`", stringify!($Struct), "`]")]
+            #[doc = concat!(
+                "See ",
+                "[`dioxus_shareables::shareable_struct!`](`", stringify!($crate), "::shareable_struct!`)",
+                " for more info."
+            )]
             #[allow(dead_code)]
             #[must_use]
             $vis fn new() -> $crate::arcmap::ArcMap<<Self as $crate::r#struct::ShareableStruct>::Content> {
@@ -904,13 +922,20 @@ macro_rules! __shareable_struct_main {
             }
         }
         #[doc = concat!("Actions on a [`", stringify!($Struct), "`]")]
-        #[doc = "See [`dioxus_shareables::shareable_struct`] for more info"]
+        #[doc = concat!(
+            "See ",
+            "[`dioxus_shareables::shareable_struct!`](`", stringify!($crate), "::shareable_struct!`)",
+            " for more info."
+        )]
         $vis trait $StructActions:
             Default
                 $(+ $crate::r#struct::FieldFlag<$crate::struct_assoc_type!($Struct::Fields::$f)>)*
                 $(+ $crate::r#struct::SubstructFlag<$crate::struct_assoc_type!($Struct::Substructs::$s)>)*
         {
-            $(type $fdata;)*
+            $(
+             #[allow(non_camel_case_types)]
+             type $fdata;
+             )*
         }
         impl<__Actions: $StructActions> $crate::r#struct::ShareableStructWithActions for $Struct<__Actions> {
             type Base = $Struct;
@@ -1026,6 +1051,7 @@ macro_rules! __shareable_struct_main {
             )*
             $vis struct $StructSubstructData;
             $(
+                #[allow(non_camel_case_types)]
                 $vis struct $sdata;
                 $crate::struct_assoc_type!(impl $Struct::Substructs::$s for $StructFieldData = $sdata);
                 impl $crate::r#struct::Substruct for $sdata {
@@ -1471,8 +1497,11 @@ where
 #[macro_export]
 #[allow(clippy::module_name_repetitions)]
 macro_rules! struct_actions {
-    ($Struct:ty { $field:ident: $flag:ident$(, $($($bod:tt)+)?)? }) => {
-        (<$Struct as $crate::r#struct::ShareableStruct>::FlagAs<$crate::r#struct_assoc_type!({$Struct}::Fields::$field), $crate::$flag>$($(, $crate::struct_actions!($Struct { $($bod)* }))?)?)
+    ($Struct:ty { $field:ident: $flag:ident$(,)? }) => {
+        <$Struct as $crate::r#struct::ShareableStruct>::FlagAs<$crate::r#struct_assoc_type!({$Struct}::Fields::$field), $crate::$flag>
+    };
+    ($Struct:ty { $field:ident: $flag:ident, $($bod:tt)+ }) => {
+        (<$Struct as $crate::r#struct::ShareableStruct>::FlagAs<$crate::r#struct_assoc_type!({$Struct}::Fields::$field), $crate::$flag>, $crate::struct_actions!($Struct { $($bod)* }))
     };
     ($Struct:ty { |$field:ident: {$($flags:tt)*}$(, $($($bod:tt)+)?)? }) => {
         (<$Struct as $crate::r#struct::ShareableStruct>::FlagAs<
@@ -1507,6 +1536,7 @@ macro_rules! __alias_actions {
       substructs: [$($substruct:ident)*]
       other: [$($othera:ident)*]
     ) => {
+        #[allow(non_camel_case_types)]
         #[derive(Default)]
         $vis struct $m;
         $crate::struct_assoc_type!(impl $Struct::Actions::$a for $StructActionData = $m);
@@ -1555,6 +1585,7 @@ impl<F, A> Init<F, A> {
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 #[doc(hidden)]
 #[macro_export]
 macro_rules! struct_initializer {

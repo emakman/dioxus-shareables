@@ -12,13 +12,13 @@
 
     #[allow(non_snake_case)]
     pub fn Reader(cx: Scope) -> Element {
-        let r = *Var.use_rw(&cx).read(); // this component will update when Var changes.
+        let r = *Var.use_rw(cx).read(); // this component will update when Var changes.
         // ...
     }
 
     #[allow(non_snake_case)]
     pub fn Writer(cx: Scope) -> Element {
-        let w1 = Var.use_w(&cx); // this component writes to Var, but does not get updated when Var
+        let w1 = Var.use_w(cx); // this component writes to Var, but does not get updated when Var
                                  // changes
         // ...
     }
@@ -34,7 +34,7 @@
     
     #[allow(non_snake_case)]
     fn IterateOverNumbers(cx: Scope) -> Element {
-        let nums = Numbers.use_rw(&cx); // This component is updated when new items are added to or
+        let nums = Numbers.use_rw(cx); // This component is updated when new items are added to or
                                         // removed from the list, but not when the individual list
                                         // items change.
         let w = nums.clone();
@@ -48,9 +48,9 @@
     #[allow(non_snake_case)]
     #[inline_props]
     fn ReadANumber(cx: Scope, num: ListEntry<usize>) -> Element {
-        let num = num.use_rw(&cx); // This component is updated when this specific entry in the
+        let num = num.use_rw(cx); // This component is updated when this specific entry in the
                                    // list is modified, but not when the others are.
-        ...
+        // ...
     }
     ```
     `List` is a `Vec` internally, and the methods it implements therefore get their names and behavior from `Vec`.
@@ -61,35 +61,39 @@
     ```rust
     use dioxus::prelude::*;
     dioxus_shareables::shareable_struct! {
-        pub struct Fuzzy {
+        pub static struct Fuzzy {
             wuzzy: u8 = 17,
             was_a: u16 = 59,
             was_he: &'static str = "bear?",
         }
-        action WAS impl pub WasTrait = W[was_a, was_he]; // declares a WAS action constant, as well an
-                                                         // equivalent trait.
-        action INIT = W[wuzzy, was_a] RW[was_he]; // declares the INIT constant, but no
-                                                  // equivalent trait.
+        action Was: pub WasTrait = { was_a: W, was_he: W }; // declares a Was action type, as well as an
+                                                            // equivalent trait.
+        action Init = { wuzzy: W, was_a: W, was_he: RW }; // declares the INIT type, but no
+                                                          // equivalent trait.
     }
     impl<A: FuzzyActions> Fuzzy<A> {
-        pub fn method(&self) where A: WasTrait {
-           let me = self.with_actions(WAS); // Pending updates to the rust trait system, we
-                                            // have to typecast here to get a Fuzzy<WAS>.
-           *me.was_he().write() = "bare!"; // We have access to was_he
-           // self.wuzzy(); // but this would fail because we don't have access to wuzzy.
-           // ...
+        pub fn method(&self)
+        where
+            A: WasTrait,
+        {
+            let me = A::typecast(self); // Pending updates to the rust trait system, we
+                                        // have to typecast here to get a Fuzzy<Was>.
+            *me.was_he().write() = "bare!"; // We have access to was_he
+                                            // self.wuzzy(); // but this would fail because we don't have access to wuzzy.
+            // ...
         }
     }
     // ...
     fn component(cx: Scope) -> Element {
-         let fuzzy = Fuzzy::use_(&cx, INIT); // This creates the hooks for the struct and initializes it
-                                             // from the necessary globals.
-         // ...
-         fuzzy.method(); // This is ok, since the INIT action includes everything the WAS action does.
-         // ...
-         cx.render(rsx!{div{}})
+        let fuzzy = Fuzzy::use_::<Init, _>(cx); // This creates the hooks for the struct and initializes it
+                                                // from the necessary globals.
+        // ...
+        fuzzy.method(); // This is ok, since the INIT action includes everything the WAS action does.
+        // ...
+        cx.render(rsx! {div{}})
     }
     ```
+    Shareable structs can have multiple instances (each of which can then be shared between components) and used in collections. See the documentation on `shareable_struct!` for more.
 
 ## A note on version numbers.
 If you're looking at the versions on Crates.io, you might notice that there the first release was a version 1.0. The simple version of the story is that I'm new to sharing my code with others and did *not* think about semver. Since then I've yanked all the release versions to sync the version numbers on this crate with the latest dioxus prerelease version.

@@ -40,7 +40,7 @@ use crate::shared::{Link, Shareable, Shared};
 /// # #[allow(non_snake_case)]
 /// #[inline_props]
 /// fn ListItem(cx: Scope, num: ListEntry<usize>) -> Element {
-///     let num = num.use_rw(&cx); // This component is updated when this specific entry in the
+///     let num = num.use_rw(cx); // This component is updated when this specific entry in the
 ///                                // list is modified.
 ///     let w1 = num.clone();
 ///     let w2 = num.clone();
@@ -437,7 +437,7 @@ impl<T: 'static + Send + Sync> ListEntry<T> {
     /// parent component. If you need to access an entry in the component which owns the list it
     /// belongs to, then you generally need to use [`share`](Self::share) instead.
     #[must_use]
-    pub fn use_w<'a, P>(&self, cx: &dioxus_core::Scope<'a, P>) -> &'a mut Shared<T, super::W> {
+    pub fn use_w<'a, P>(&self, cx: dioxus_core::Scope<'a, P>) -> &'a mut Shared<T, super::W> {
         let mut opt = Shareable(Some(self.0.clone()));
         Shared::init(cx, &mut opt, || unreachable!(), super::W)
     }
@@ -449,7 +449,7 @@ impl<T: 'static + Send + Sync> ListEntry<T> {
     /// parent component. If you need to access an entry in the component which owns the list it
     /// belongs to, then you generally need to use [`share`](Self::share) instead.
     #[must_use]
-    pub fn use_rw<'a, P>(&self, cx: &dioxus_core::Scope<'a, P>) -> &'a mut Shared<T, super::RW> {
+    pub fn use_rw<'a, P>(&self, cx: dioxus_core::Scope<'a, P>) -> &'a mut Shared<T, super::RW> {
         let mut opt = Shareable(Some(self.0.clone()));
         Shared::init(cx, &mut opt, || unreachable!(), super::RW)
     }
