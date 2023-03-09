@@ -104,7 +104,8 @@ impl<T: 'static + Send + Sync> Arc for std::sync::Arc<T> {
 }
 
 impl<T: crate::r#struct::Content> ArcMap<T> {
-    /// Access the contained value as type `S`, a struct created using [`shareable_struct!`].
+    /// Access the contained value as type `S`, a struct created using
+    /// [`shareable_struct!`](`crate::shareable_struct`).
     #[must_use]
     pub fn use_<'a, S: 'static + crate::r#struct::ShareableStructWithActions<Base = T::For>, P>(
         &self,
@@ -118,7 +119,7 @@ impl<T: crate::r#struct::Content> ArcMap<T> {
             )
         })
     }
-    /// Access the contained value as type `S`, a struct created using [`shareable_struct!`].
+    /// Access the contained value as type `S`, a struct created using [`shareable_struct!`](`crate::shareable_struct`).
     #[must_use]
     pub fn share<S: 'static + crate::r#struct::ShareableStructWithActions<Base = T::For>>(
         &self,

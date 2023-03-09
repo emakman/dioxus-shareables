@@ -1,73 +1,67 @@
 //! Macros for inherent associated types.
 
-/// Hack to get stable inherent associated associated types.
+/// Trick to get inherent associated associated types in `stable`.
+///
+/// This is used quite a bit by `struct_assoc_type!` and `struct_actions!`. The main reason for you
+/// to use it directly is to get the associated `Shareable` type for a struct declared with
+/// [`shareable_struct!`](`crate::shareable_struct`). See documentation there for more info.
 ///
 /// If you are getting weird errors about `AssocSubstruct`, `AssocField` constraints not being
-/// correct, then this is probably the culprit. Spellcheck uses of `struct_assoc_type!` and
-/// `struct_actions!`.
+/// correct, then this is probably the culprit. Spellcheck field names in uses of `struct_assoc_type!`
+/// and `struct_actions!`.
 #[macro_export]
 #[allow(clippy::module_name_repetitions)]
 macro_rules! struct_assoc_type {
+    ($Struct:ident::$($r:tt)*) => {
+        $crate::struct_assoc_type_inner!({$Struct}::$($r)*)
+    };
+    ({$Struct:ty}::$($r:tt)*) => {
+        $crate::struct_assoc_type_inner!({$Struct}::$($r)*)
+    };
+}
+
+#[macro_export]
+#[doc(hidden)]
+macro_rules! struct_assoc_type_inner {
     ({$Struct:ty}::Actions::$action:ident) => {
         $crate::reexported::paste! {
-            $crate::struct_assoc_type! {
-                @[AssocAction][$Struct](<<$Struct as $crate::r#struct::ShareableStruct>::ActionData as )([<Action $action:camel>])(>::Type)
-            }
-        }
-    };
-    ($Struct:ident::Actions::$action:ident) => {
-        $crate::reexported::paste! {
-            $crate::struct_assoc_type! {
+            $crate::struct_assoc_type_inner! {
                 @[AssocAction][$Struct](<<$Struct as $crate::r#struct::ShareableStruct>::ActionData as )([<Action $action:camel>])(>::Type)
             }
         }
     };
     ({$Struct:ty}::Fields::$field:ident) => {
         $crate::reexported::paste! {
-            $crate::struct_assoc_type! {
-                @[AssocField][$Struct](<<$Struct as $crate::r#struct::ShareableStruct>::FieldData as )([<Field $field:camel>])(>::Type)
-            }
-        }
-    };
-    ($Struct:ident::Fields::$field:ident) => {
-        $crate::reexported::paste! {
-            $crate::struct_assoc_type! {
+            $crate::struct_assoc_type_inner! {
                 @[AssocField][$Struct](<<$Struct as $crate::r#struct::ShareableStruct>::FieldData as )([<Field $field:camel>])(>::Type)
             }
         }
     };
     ({$Struct:ty}::Substructs::$field:ident) => {
         $crate::reexported::paste! {
-            $crate::struct_assoc_type! {
+            $crate::struct_assoc_type_inner! {
                 @[AssocSubstruct][$Struct](<<$Struct as $crate::r#struct::ShareableStruct>::FieldData as )([<Field $field:camel>])(>::Type)
             }
         }
     };
-    ($Struct:ident::Substructs::$field:ident) => {
-        $crate::reexported::paste! {
-            $crate::struct_assoc_type! {
-                @[AssocSubstruct][$Struct](<<$Struct as $crate::r#struct::ShareableStruct>::FieldData as )([<Field $field:camel>])(>::Type)
-            }
-        }
-    };
-    ($Struct:ident::Shareable) => { $crate::arcmap::ArcMap<<$Struct as $crate::r#struct::ShareableStruct>::Content> };
+    ({$Struct:ty}::Shareable) => { $crate::arcmap::ArcMap<<$Struct as $crate::r#struct::ShareableStruct>::Content> };
     (impl $Struct:ident::Actions::$action:ident for $T:ty = $($what:tt)*) => {
         $crate::reexported::paste! {
-            $crate::struct_assoc_type! {
+            $crate::struct_assoc_type_inner! {
                 @[AssocAction][$Struct](impl)([<Action $action:camel>])(for $T { type Type = $($what)*; })
             }
         }
     };
     (impl $Struct:ident::Fields::$field:ident for $T:ty = $($what:tt)*) => {
         $crate::reexported::paste! {
-            $crate::struct_assoc_type! {
+            $crate::struct_assoc_type_inner! {
                 @[AssocField][$Struct](impl)([<Field $field:camel>])( for $T { type Type = $($what)*; })
             }
         }
     };
     (impl $Struct:ident::Substructs::$field:ident for $T:ty = $($what:tt)*) => {
         $crate::reexported::paste! {
-            $crate::struct_assoc_type! {
+            $crate::struct_assoc_type_inner! {
                 @[AssocSubstruct][$Struct](impl)([<Field $field:camel>])( for $T { type Type = $($what)*; })
             }
         }

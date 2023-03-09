@@ -2,30 +2,30 @@ pub mod assoc_type;
 /// Create a `struct` in which sharing can be controlled on the field level.
 ///
 /// The idea is that each field of the struct will have separate update handles (i.e., be stored in
-/// a separate (`Link`)[`crate::shared::Link`], and loaded only when requested. The actions block
+/// a separate [`Link`](`crate::shared::Link`), and loaded only when requested. The actions block
 /// describes possible ways of using the struct in terms of what type of access
 /// ([`W`](crate::W) or [`RW`](crate::RW)) they need to fields of the struct.
 ///
 /// The basic syntax is as follows:
 /// ```
-///     # fn main() {}
-///     use dioxus_shareables::shareable_struct;
-///     shareable_struct! {
-///         pub static struct GlobalState {
-///             a: usize = 8,
-///             b: u16 = 12,
-///             c: Vec<u8> = vec![],
-///         }
-///
-///         action A: ATrait = { a: W, b: RW }; // Action A with an equivalent trait ATrait.
-///         pub action B: BTrait = { b: W, a: RW, c: RW }; // B is visible outside the defining
-///                                                        // module but BTrait is not.
-///         action C: pub CTrait = { c: RW }; // CTrait is visible outside the defining module
-///                                           // but C is not.
-///         action _: pub D = { c: W }; // We define only the trait for D.
-///         action E = { b: RW }; // And only the type for E.
-///         action F = { A, a: RW }; // Acts like { a: RW, b: RW };
+/// # fn main() {}
+/// use dioxus_shareables::shareable_struct;
+/// shareable_struct! {
+///     pub static struct GlobalState {
+///         a: usize = 8,
+///         b: u16 = 12,
+///         c: Vec<u8> = vec![],
 ///     }
+///
+///     action A: ATrait = { a: W, b: RW }; // Action A with an equivalent trait ATrait.
+///     pub action B: BTrait = { b: W, a: RW, c: RW }; // B is visible outside the defining
+///                                                    // module but BTrait is not.
+///     action C: pub CTrait = { c: RW }; // CTrait is visible outside the defining module
+///                                       // but C is not.
+///     action _: pub D = { c: W }; // We define only the trait for D.
+///     action E = { b: RW }; // And only the type for E.
+///     action F = { A, a: RW }; // Extends A (equiv. to { a: RW, b: RW })
+/// }
 /// ```
 /// NOTE: fields in the struct must be `Send + Sync`
 ///
@@ -33,96 +33,98 @@ pub mod assoc_type;
 /// struct. When we use the struct, we then have to declare which actions we need:
 ///
 /// ```
-///     # fn main() {}
-///     # use dioxus::prelude::*;
-///     # use dioxus_shareables::shareable_struct;
-///     # shareable_struct! {
-///     #   pub static struct GlobalState {
-///     #       a: usize = 8,
-///     #       b: u16 = 12,
-///     #       c: Vec<u8> = vec![],
-///     #   }
-///     #
-///     #   action A: ATrait = { a: W, b: RW }; // Action A with an equivalent trait ATrait.
-///     #   pub action B: BTrait = { b: W, a: RW, c: RW }; // B is visible outside the defining
-///     #                                                  // module but BTrait is not.
-///     #   action C: pub CTrait = { c: RW }; // CTrait is visible outside the defining module
-///     #                                     // but C is not.
-///     #   action _: pub D = { c: W }; // We define only the trait for D.
-///     #   action E = { b: RW }; // And only the type for E.
-///     #   action F = { A, a: RW }; // Acts like { a: RW, b: RW };
-///     # }
-///     # #[allow(non_snake_case)]
+/// # fn main() {}
+/// # use dioxus::prelude::*;
+/// # use dioxus_shareables::shareable_struct;
+/// # shareable_struct! {
+/// #   pub static struct GlobalState {
+/// #       a: usize = 8,
+/// #       b: u16 = 12,
+/// #       c: Vec<u8> = vec![],
+/// #   }
+/// #
+/// #   action A: ATrait = { a: W, b: RW }; // Action A with an equivalent trait ATrait.
+/// #   pub action B: BTrait = { b: W, a: RW, c: RW }; // B is visible outside the defining
+/// #                                                  // module but BTrait is not.
+/// #   action C: pub CTrait = { c: RW }; // CTrait is visible outside the defining module
+/// #                                     // but C is not.
+/// #   action _: pub D = { c: W }; // We define only the trait for D.
+/// #   action E = { b: RW }; // And only the type for E.
+/// #   action F = { A, a: RW }; // Acts like { a: RW, b: RW };
+/// # }
+/// # #[allow(non_snake_case)]
+/// //...
+/// fn Component1(cx: Scope) -> Element {
+///     let state = GlobalState::use_::<(A,B), _>(cx); // Use GlobalState with actions A and B.
+///                                                    // We could do (A,(B,C))
+///                                                    // if we wanted A, B, and C
+///     // ...
+///     let b = *state.b().read(); // We can access field b because actions B includes it.
 ///     //...
-///     fn Component1(cx: Scope) -> Element {
-///         let state = GlobalState::use_::<(A,B), _>(cx); // Use GlobalState with actions A and B.
-///         // ...
-///         let b = *state.b().read(); // We can access field b because actions B includes it.
-///         //...
-///         # cx.render(rsx! {
-///         #     div {
-///         #       onmousedown: |_| { *state.a().write() += 1; },
-///         #       onmouseover: |_| { *state.b().write() -= 3; }
-///         #     }
-///         # })
-///     }
+///     # cx.render(rsx! {
+///     #     div {
+///     #       onmousedown: |_| { *state.a().write() += 1; },
+///     #       onmouseover: |_| { *state.b().write() -= 3; }
+///     #     }
+///     # })
+/// }
 /// ```
 ///
 /// Of course, there's not a lot of point to grouping shared variables into a type if we don't
 /// implement some methods on the type. This is where the types on the actions come in:
 /// ```
-///     # fn main() {}
-///     # use dioxus::prelude::*;
-///     # use dioxus_shareables::shareable_struct;
-///     # shareable_struct! {
-///     #     pub static struct GlobalState {
-///     #         a: usize = 8,
-///     #         b: u16 = 12,
-///     #         c: Vec<u8> = vec![],
-///     #     }
-///     #
-///     #   action A: ATrait = { a: W, b: RW }; // Action A with an equivalent trait ATrait.
-///     #   pub action B: BTrait = { b: W, a: RW, c: RW }; // B is visible outside the defining
-///     #                                                  // module but BTrait is not.
-///     #   action C: pub CTrait = { c: RW }; // CTrait is visible outside the defining module
-///     #                                     // but C is not.
-///     #   action _: pub D = { c: W }; // We define only the trait for D.
-///     #   action E = { b: RW }; // And only the type for E.
-///     #   action F = { A, a: RW }; // Acts like { a: RW, b: RW };
-///     # }
-///     //...
-///     impl GlobalState<C> {
-///         pub fn c_method(&self) {
-///             // Do some stuff...
-///         }
+/// # fn main() {}
+/// # use dioxus::prelude::*;
+/// # use dioxus_shareables::shareable_struct;
+/// # shareable_struct! {
+/// #     pub static struct GlobalState {
+/// #         a: usize = 8,
+/// #         b: u16 = 12,
+/// #         c: Vec<u8> = vec![],
+/// #     }
+/// #
+/// #   action A: ATrait = { a: W, b: RW }; // Action A with an equivalent trait ATrait.
+/// #   pub action B: BTrait = { b: W, a: RW, c: RW }; // B is visible outside the defining
+/// #                                                  // module but BTrait is not.
+/// #   action C: pub CTrait = { c: RW }; // CTrait is visible outside the defining module
+/// #                                     // but C is not.
+/// #   action _: pub D = { c: W }; // We define only the trait for D.
+/// #   action E = { b: RW }; // And only the type for E.
+/// #   action F = { A, a: RW }; // Acts like { a: RW, b: RW };
+/// # }
+/// //...
+/// impl GlobalState<C> {
+///     pub fn c_method(&self) {
+///         // Do some stuff...
 ///     }
-///     // Valid action markers implement GlobalStateActions:
-///     impl<Actions: GlobalStateActions> GlobalState<Actions> {
-///         // N.B. that D is the trait, not the actions constant:
-///         pub fn clever_d_method(&self) where Actions: D {
-///             let self_ = Actions::typecast(self); // Trait D provides this typecast method.
-///             // ...
-///         }
+/// }
+/// // Valid action markers implement GlobalStateActions:
+/// impl<Actions: GlobalStateActions> GlobalState<Actions> {
+///     // N.B. that D is the trait, not the type:
+///     pub fn clever_d_method(&self) where Actions: D {
+///         let self_ = Actions::typecast(self); // Trait D provides this typecast method.
+///         // ...
 ///     }
-///     // ...
-///     # #[allow(non_snake_case)]
-///     fn Component2(cx: Scope) -> Element {
-///         let a_state: &GlobalState<A> = GlobalState::use_(cx);
-///         let b_state: &GlobalState<B> = GlobalState::use_(cx);
-///         let c_state: &GlobalState<C> = GlobalState::use_(cx);
+/// }
+/// // ...
+/// # #[allow(non_snake_case)]
+/// fn Component2(cx: Scope) -> Element {
+///     let a_state: &GlobalState<A> = GlobalState::use_(cx);
+///     let b_state: &GlobalState<B> = GlobalState::use_(cx);
+///     let c_state: &GlobalState<C> = GlobalState::use_(cx);
 ///
-///         c_state.c_method(); // This is fine, since it's the type we defined the function on.
-///         // b_state.c_method(); // This will fail because the type is wrong.
-///         b_state.as_ref().c_method(); // This works, but only if the type resolves correctly.
-///         b_state.with_actions::<C>().c_method(); // This is guaranteed to work.
-///         // a_state.as_ref().c_method();            // These will fail since `a_state` doesn't
-///         // a_state.with_actions::<C>().c_method(); // meet the `c: RW` requirement.
+///     c_state.c_method(); // This is fine, since it's the type we defined the function on.
+///     // b_state.c_method(); // This will fail because the type is wrong.
+///     b_state.as_ref().c_method(); // This works, but only if the type resolves correctly.
+///     b_state.with_actions::<C>().c_method(); // This is guaranteed to work.
+///     // a_state.as_ref().c_method();            // These will fail since `a_state` doesn't
+///     // a_state.with_actions::<C>().c_method(); // meet the `c: RW` requirement.
 ///
-///         // a_state.clever_d_method(); // Fails because a_state doesn't meet the `c: W` requirement.
-///         b_state.clever_d_method(); // This works.
-///         c_state.clever_d_method(); // So does this.
-///         # cx.render(rsx! { div {} })
-///     }
+///     // a_state.clever_d_method(); // Fails because a_state doesn't meet the `c: W` requirement.
+///     b_state.clever_d_method(); // This works.
+///     c_state.clever_d_method(); // So does this.
+///     # cx.render(rsx! { div {} })
+/// }
 /// ```
 ///
 /// It's up to you where you prefer to typecast.
@@ -130,49 +132,54 @@ pub mod assoc_type;
 /// You don't need to declare actions in advance to use them; in particular, you may decide you
 /// want to use one-off action declarations on method declarations:
 /// ```
-///     # fn main() {}
-///     # use dioxus::prelude::*;
-///     # use dioxus_shareables::shareable_struct;
-///     # shareable_struct! {
-///     #     pub static struct GlobalState {
-///     #         a: usize = 8,
-///     #         b: u16 = 12,
-///     #         c: Vec<u8> = vec![],
-///     #     }
-///     #
-///     #   action A: ATrait = { a: W, b: RW }; // Action A with an equivalent trait ATrait.
-///     #   pub action B: BTrait = { b: W, a: RW, c: RW }; // B is visible outside the defining
-///     #                                                  // module but BTrait is not.
-///     #   action C: pub CTrait = { c: RW }; // CTrait is visible outside the defining module
-///     #                                     // but C is not.
-///     #   action _: pub D = { c: W }; // We define only the trait for D.
-///     #   action E = { b: RW }; // And only the type for E.
-///     #   action F = { A, a: RW }; // Acts like { a: RW, b: RW };
-///     # }
-///     // ...
-///     use dioxus_shareables::struct_actions;
-///     impl<Actions: GlobalStateActions> GlobalState<Actions> {
-///         # #[must_use]
-///         pub fn calculate_from_a_and_c(&self) -> usize
-///         where
-///             Self: AsRef<GlobalState<struct_actions!{GlobalState {a: RW, c: RW}}>>
-///         {
-///             let self_ = self.as_ref();
-///             self_.a();
-///             // ...
-///             # 3
-///         }
+/// # fn main() {}
+/// # use dioxus::prelude::*;
+/// # use dioxus_shareables::shareable_struct;
+/// # shareable_struct! {
+/// #     pub static struct GlobalState {
+/// #         a: usize = 8,
+/// #         b: u16 = 12,
+/// #         c: Vec<u8> = vec![],
+/// #     }
+/// #
+/// #   action A: ATrait = { a: W, b: RW }; // Action A with an equivalent trait ATrait.
+/// #   pub action B: BTrait = { b: W, a: RW, c: RW }; // B is visible outside the defining
+/// #                                                  // module but BTrait is not.
+/// #   action C: pub CTrait = { c: RW }; // CTrait is visible outside the defining module
+/// #                                     // but C is not.
+/// #   action _: pub D = { c: W }; // We define only the trait for D.
+/// #   action E = { b: RW }; // And only the type for E.
+/// #   action F = { A, a: RW }; // Acts like { a: RW, b: RW };
+/// # }
+/// // ...
+/// use dioxus_shareables::struct_actions;
+/// impl<Actions: GlobalStateActions> GlobalState<Actions> {
+///     # #[must_use]
+///     pub fn calculate_from_a_and_c(&self) -> usize
+///     where
+///         Self: AsRef<shareable_struct!{GlobalState<{a: RW, c: RW}>}>,
+///         // Alternate form:
+///         // Self: AsRef<GlobalState<struct_actions!(GlobalState {a: RW, c: RW})>>
+///         # Self: AsRef<GlobalState<struct_actions!(GlobalState {a: RW, c: RW})>>
+///     {
+///         let self_ = self.as_ref();
+///         self_.a();
+///         // ...
+///         # 3
 ///     }
-///     // ...
-///     # #[allow(non_snake_case)]
-///     fn Component3(cx: Scope) -> Element {
-///         let a_state = GlobalState::use_::<A, _>(cx);
-///         let b_state = GlobalState::use_::<B, _>(cx);
+/// }
+/// // ...
+/// # #[allow(non_snake_case)]
+/// fn Component3(cx: Scope) -> Element {
+///     let a_state = GlobalState::use_::<A, _>(cx);
+///     let b_state = GlobalState::use_::<B, _>(cx);
 ///
-///         // a_state.calculate_from_a_and_c(); // This will fail since `a_state` doesn't meet the RW[c] requirement.
-///         b_state.calculate_from_a_and_c(); // This works, but only if the type resolves correctly.
-///         # cx.render(rsx! { div {} })
-///     }
+///     // a_state.calculate_from_a_and_c(); // This will fail since `a_state` doesn't meet the
+///                                          // `c: RW` requirement.
+///     b_state.calculate_from_a_and_c(); // This works.
+///     type resolves correctly.
+///     # cx.render(rsx! { div {} })
+/// }
 /// ```
 ///
 ///
@@ -180,134 +187,133 @@ pub mod assoc_type;
 /// wants to declare a substructure without the `static` keyword (so that there is no global instance
 /// of the type, just the ones that appear as substructures).
 /// ```
-///     # fn main() {}
-///     # use dioxus::prelude::*;
-///     use dioxus_shareables::shareable_struct;
-///     shareable_struct! {
-///         pub struct Substruct {
-///             a: usize = 8,
-///             b: u16 = 12,
-///             c: Vec<u8> = vec![],
-///         }
-///     
-///       action A = {a: W, b: RW};
-///       action B = {a: RW, b: W, c: RW};
-///       action C = {c: RW};
-///       action _: pub D = {c: W};
+/// # fn main() {}
+/// # use dioxus::prelude::*;
+/// use dioxus_shareables::shareable_struct;
+/// shareable_struct! {
+///     pub struct Substruct {
+///         a: usize = 8,
+///         b: u16 = 12,
+///         c: Vec<u8> = vec![],
 ///     }
-///     impl<Actions: SubstructActions> Substruct<Actions> {
-///         pub fn clever_d_method(&self)
-///         where
-///             Actions: D,
-///         {
-///             let self_ = Actions::typecast(self);
-///             // ...
-///         }
-///     }
-///     // ...
-///     shareable_struct! {
-///         pub static struct ParentStruct {
-///             s: String = "Some silly string...".into(),
-///             t: u32 = 18,
-///             |u: Substruct,
-///             |v: Substruct, // N.B. `s` and `t` will point to different instances of `Substruct`.
-///             |w: Substruct = { // in fact, we can add separate initializers for substructs of
-///                               // of the same type.
-///                     a: 3,
-///                     b: 7,
-///                 },
-///         }
-///         action UVA = {s: W, t: RW, |u: { a: RW, c: W }};
-///         action UBC = {s: W, |v: { A, B }}; // N.B. you can refer to actions `A` and `B` even though
-///                                            // they aren't in scope. (Since they were defined in the
-///                                            // initial definition of `Substruct`).
-///     }
-///     // ...
-///     #[allow(non_snake_case)]
-///     fn Component(cx: Scope) -> Element {
-///         let mgs = ParentStruct::use_::<UVA, _>(cx);
-///         mgs.u.clever_d_method(); // Works bcause action our mgs.s was initialized with the
-///                                  // `c: RW` (this is part of action `B`) and this implies
-///                                  // action `D`.
+///
+///   action A = {a: W, b: RW};
+///   action B = {a: RW, b: W, c: RW};
+///   action C = {c: RW};
+///   action _: pub D = {c: W};
+/// }
+/// impl<Actions: SubstructActions> Substruct<Actions> {
+///     pub fn clever_d_method(&self)
+///     where
+///         Actions: D,
+///     {
+///         let self_ = Actions::typecast(self);
 ///         // ...
-///         # cx.render(rsx! { div {} })
 ///     }
-///     #
-///     # // We'll put the nested test here, so that it's with the rest, but we don't want it in
-///     # // the documentation.
-///     # shareable_struct! {
-///     #     pub static struct ParentParentStruct {
-///     #         m: usize = 3,
-///     #         |n: ParentStruct = {},
-///     #         |o: ParentStruct,
-///     #         |p: ParentStruct = {
-///     #             |u: { a: 7 },
-///     #             s: "usw...".into(),
-///     #         }
-///     #     }
-///     # }
+/// }
+/// // ...
+/// shareable_struct! {
+///     pub static struct ParentStruct {
+///         s: String = "Some silly string...".into(),
+///         t: u32 = 18,
+///         |u: Substruct,
+///         |v: Substruct, // N.B. `s` and `t` will point to different instances of `Substruct`.
+///         |w: Substruct = { // in fact, we can add separate initializers for substructs of
+///                           // of the same type.
+///                 a: 3,
+///                 b: 7,
+///             },
+///     }
+///     action UVA = {s: W, t: RW, |u: { a: RW, c: W }};
+///     action UBC = {s: W, |v: { A, B }}; // N.B. you can refer to actions `A` and `B` even though
+///                                        // they aren't in scope. (Since they were defined in the
+///                                        // initial definition of `Substruct`).
+/// }
+/// // ...
+/// #[allow(non_snake_case)]
+/// fn Component(cx: Scope) -> Element {
+///     let mgs = ParentStruct::use_::<UVA, _>(cx);
+///     mgs.u.clever_d_method(); // Works bcause action `mgs.s` was initialized with `c: RW` (this
+///                              // is part of action `B`) and this implies action `D`.
+///     // ...
+///     # cx.render(rsx! { div {} })
+/// }
+/// #
+/// # // We'll put the nested test here, so that it's with the rest, but we don't want it in
+/// # // the documentation.
+/// # shareable_struct! {
+/// #     pub static struct ParentParentStruct {
+/// #         m: usize = 3,
+/// #         |n: ParentStruct = {},
+/// #         |o: ParentStruct,
+/// #         |p: ParentStruct = {
+/// #             |u: { a: 7 },
+/// #             s: "usw...".into(),
+/// #         }
+/// #     }
+/// # }
 /// ```
 ///
 /// More complicated relationships between shareable structs (for example a collection of shareable
-/// structs contained in one shareable struct) can be acheived using the associated Shareable type.
+/// structs contained in one shareable struct) can be acheived using the associated `Shareable` type.
 ///
 /// ```
-///     # fn main() {}
-///     # use dioxus::prelude::*;
-///     use dioxus_shareables::{shareable_struct, struct_actions, struct_assoc_type};
-///     shareable_struct! {
-///       pub struct Item {
-///           priority: u32 = 0,
-///           desc: String = "<DESCRIPTION HERE>".into(),
-///           tags: Vec<String> = vec![],
-///       }
-///       action CreateItem = { priority: W, desc: W };
-///       action ShowItem = { priority: RW, desc: RW, tags: RW };
+/// # fn main() {}
+/// # use dioxus::prelude::*;
+/// use dioxus_shareables::{shareable_struct, struct_actions, struct_assoc_type};
+/// shareable_struct! {
+///     pub struct Item {
+///         priority: u32 = 0,
+///         desc: String = "<DESCRIPTION HERE>".into(),
+///         tags: Vec<String> = vec![],
 ///     }
+///     action CreateItem = { priority: W, desc: W };
+///     action ShowItem = { priority: RW, desc: RW, tags: RW };
+/// }
+/// // ...
+/// shareable_struct! {
+///     pub static struct SharedList {
+///         title: String = "A List".into(),
+///         author: String = "You".into(),
+///         items: Vec<struct_assoc_type!(Item::Shareable)> = vec![],
+///     }
+///     action ReadAll = { title: RW, author: RW, items: RW };
+/// }
+/// // ...
+/// impl<A: SharedListActions> SharedList<A> {
+///     fn add_item(&self, priority: u32, desc: String)
+///     where
+///         Self: AsRef<shareable_struct!(SharedList<{ items: W }>)>
+///     {
+///         // let new_item = Item::new(); // This works, but it's inflexible.
+///         # let _fn_new_test: struct_assoc_type!(Item::Shareable) = Item::new();
+///         let new_item = shareable_struct!(Item { // We can use `shareable_struct!` to
+///             desc: desc,                         // initialize a new instance of the data
+///             priority: priority                  // instead.
+///         });
+///         self.as_ref().items().write().push(new_item);
+///     }
+/// }
+/// // ...
+/// # #[allow(non_snake_case)]
+/// fn SharedListComponent(cx: Scope) -> Element {
+///     let list: &SharedList<ReadAll> = SharedList::use_(cx);
+///     let title = list.title().read();
+///     let author = list.author().read();
+///     cx.render(rsx! {
+///         div { class: "listtitle", "{title}" }
+///         div { class: "listauthor", "{author}" }
+///         list.items().read().iter().cloned().map(|item| rsx! { ItemComponent { item: item } })
+///     })
+/// }
+/// // ...
+/// # #[allow(non_snake_case)]
+/// #[inline_props]
+/// fn ItemComponent(cx: Scope, item: struct_assoc_type!(Item::Shareable)) -> Element {
+///     let item: &Item<ShowItem> = item.use_(cx); // = item.use_::<Item<ShowItem>>(cx);
 ///     // ...
-///     shareable_struct! {
-///         pub static struct SharedList {
-///             title: String = "A List".into(),
-///             author: String = "You".into(),
-///             items: Vec<struct_assoc_type!(Item::Shareable)> = vec![],
-///         }
-///         action ReadAll = { title: RW, author: RW, items: RW };
-///     }
-///     // ...
-///     impl<A: SharedListActions> SharedList<A> {
-///         fn add_item(&self, priority: u32, desc: String)
-///         where
-///             Self: AsRef<SharedList<struct_actions!(SharedList { items: W })>>
-///         {
-///             // let new_item = Item::new(); // This works, but it's inflexible.
-///             # let _fn_new_test: struct_assoc_type!(Item::Shareable) = Item::new();
-///             let new_item = shareable_struct!(Item { // We can use `shareable_struct!` to
-///                 desc: desc,                         // initialize a new instance of the data
-///                 priority: priority                  // instead.
-///             });
-///             self.as_ref().items().write().push(new_item);
-///         }
-///     }
-///     // ...
-///     # #[allow(non_snake_case)]
-///     fn SharedListComponent(cx: Scope) -> Element {
-///         let list: &SharedList<ReadAll> = SharedList::use_(cx);
-///         let title = list.title().read();
-///         let author = list.author().read();
-///         cx.render(rsx! {
-///             div { class: "listtitle", "{title}" }
-///             div { class: "listauthor", "{author}" }
-///             list.items().read().iter().cloned().map(|item| rsx! { ItemComponent { item: item } })
-///         })
-///     }
-///     // ...
-///     # #[allow(non_snake_case)]
-///     #[inline_props]
-///     fn ItemComponent(cx: Scope, item: struct_assoc_type!(Item::Shareable)) -> Element {
-///         let item: &Item<ShowItem> = item.use_(cx); // = item.use_::<Item<ShowItem>>(cx);
-///         // ...
-///         # cx.render(rsx! { div {} })
-///     }
+///     # cx.render(rsx! { div {} })
+/// }
 /// ```
 #[macro_export]
 #[allow(clippy::module_name_repetitions)]
@@ -331,6 +337,7 @@ macro_rules! shareable_struct {
         }
     };
     ($Struct:ident {$($init:tt)*}) => {$crate::arcmap::ArcMap::new(<<$Struct as $crate::r#struct::ShareableStruct>::Content>::from($crate::struct_initializer!($Struct {$($init)*})))};
+    ($Struct:ident<{$($actions:tt)*}>) => ($Struct<$crate::struct_actions!($Struct { $($actions)* })>);
 }
 
 #[doc(hidden)]
@@ -996,7 +1003,7 @@ macro_rules! __shareable_struct_main {
             $(
                 #[allow(non_camel_case_types)]
                 $vis struct $fdata;
-                $crate::struct_assoc_type!(impl $Struct::Fields::$f for $StructFieldData = $fdata);
+                $crate::struct_assoc_type_inner!(impl $Struct::Fields::$f for $StructFieldData = $fdata);
                 impl $crate::r#struct::Field for $fdata {
                     type Of = $Struct;
                     type Type = $fty;
@@ -1053,7 +1060,7 @@ macro_rules! __shareable_struct_main {
             $(
                 #[allow(non_camel_case_types)]
                 $vis struct $sdata;
-                $crate::struct_assoc_type!(impl $Struct::Substructs::$s for $StructFieldData = $sdata);
+                $crate::struct_assoc_type_inner!(impl $Struct::Substructs::$s for $StructFieldData = $sdata);
                 impl $crate::r#struct::Substruct for $sdata {
                     type Of = $Struct;
                     type Type = $sty;
@@ -1494,23 +1501,41 @@ where
     type RASimplified = <B::Remainder as Append<B::Combined>>::Appended;
 }
 
+/// Get an actions type for a struct declared with [`shareable_struct!`](`shareable_struct`)
+///
+/// For example `struct_actions!(Struct { a: W, b: RW })` would give the actions type for a
+/// accessing `Struct` with write permissions on field `a` and read-write permissions on field `b`.
+///
+/// If you declared an action `action WA = { a: W };` then `struct_actions!(Struct { a: W})` is
+/// equivalent to `WA`, not `Struct<WA>` if you wanted the equivalent of `Struct<WA>` you can use
+/// `shareable_struct!(Struct<{a: W}>)` for convenience but note that while the other syntax works
+/// for an arbitrary type `Struct`, this syntax only works for a single identifier.
 #[macro_export]
 #[allow(clippy::module_name_repetitions)]
 macro_rules! struct_actions {
     ($Struct:ty { $field:ident: $flag:ident$(,)? }) => {
         <$Struct as $crate::r#struct::ShareableStruct>::FlagAs<$crate::r#struct_assoc_type!({$Struct}::Fields::$field), $crate::$flag>
     };
-    ($Struct:ty { $field:ident: $flag:ident, $($bod:tt)+ }) => {
-        (<$Struct as $crate::r#struct::ShareableStruct>::FlagAs<$crate::r#struct_assoc_type!({$Struct}::Fields::$field), $crate::$flag>, $crate::struct_actions!($Struct { $($bod)* }))
-    };
-    ($Struct:ty { |$field:ident: {$($flags:tt)*}$(, $($($bod:tt)+)?)? }) => {
-        (<$Struct as $crate::r#struct::ShareableStruct>::FlagAs<
+    ($Struct:ty { |$field:ident: {$($actions:tt)*}$(,)? }) => {
+        <$Struct as $crate::r#struct::ShareableStruct>::FlagAs<
             $crate::r#struct_assoc_type!({$Struct}::Substructs::$field),
-            $crate::struct_actions!(<$crate::struct_assoc_type!({$Struct}::Substructs::$field) as $crate::r#struct::Substruct>::Type {$($flags)*})
-        >$($(, $crate::struct_actions!($Struct { $($bod)* }))?)?)
+            $crate::struct_actions!(
+                <$crate::struct_assoc_type!({$Struct}::Substructs::$field) as $crate::r#struct::Substruct>::Type
+                {$($actions)*}
+            )
+        >
     };
-    ($Struct:ty { $A:ident$(, $($($bod:tt)+)?)? }) => {
-        ($crate::struct_assoc_type!({$Struct}::Actions::$A)$($(, $crate::struct_actions!($Struct { $($bod)* }))?)?)
+    ($Struct:ty { $A:ident$(,)? }) => {
+        $crate::struct_assoc_type!({$Struct}::Actions::$A)
+    };
+    ($Struct:ty { $field:ident: $flag:ident, $($r:tt)+ }) => {
+        ($crate::struct_actions!($Struct { $field: $flag }), $crate::struct_actions!($Struct { $($r)* }))
+    };
+    ($Struct:ty { |$field:ident: {$($actions:tt)*}, $($r:tt)+ }) => {
+        ($crate::struct_actions!($Struct { |$field: {$($actions)*} }), $crate::struct_actions!($Struct { $($r)* }))
+    };
+    ($Struct:ty { $A:ident, $($r:tt)+ }) => {
+        ($crate::struct_actions!($Struct { $A }), $crate::struct_actions!($Struct { $($r)* }))
     };
     ($Struct:ty {}) => {()};
 }
@@ -1539,7 +1564,7 @@ macro_rules! __alias_actions {
         #[allow(non_camel_case_types)]
         #[derive(Default)]
         $vis struct $m;
-        $crate::struct_assoc_type!(impl $Struct::Actions::$a for $StructActionData = $m);
+        $crate::struct_assoc_type_inner!(impl $Struct::Actions::$a for $StructActionData = $m);
         $(impl $crate::r#struct::FieldFlag<$field> for $a {
             type Flag = <$ty as $crate::r#struct::FieldFlag<$field>>::Flag;
         })*
