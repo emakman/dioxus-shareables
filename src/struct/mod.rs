@@ -27,7 +27,8 @@ pub mod assoc_type;
 ///     action F = { A, a: RW }; // Extends A (equiv. to { a: RW, b: RW })
 /// }
 /// ```
-/// NOTE: fields in the struct must be `Send + Sync`
+/// NOTE: fields in the struct must be `Send + Sync` and the visibility of the types must be the
+///       same as the visibility of the struct (to avoid E0446).
 ///
 /// First we declare the struct itself, then "actions" which represent different views of the
 /// struct. When we use the struct, we then have to declare which actions we need:
