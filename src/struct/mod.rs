@@ -917,12 +917,12 @@ macro_rules! __shareable_struct_main {
             }
         }
         impl<__Actions: $StructActions> $Struct<__Actions> {
-            $( fn $f(&self) -> &$crate::shared::Shared<$fty, <__Actions as $crate::r#struct::FieldFlag<$crate::struct_assoc_type!($Struct::Fields::$f)>>::Flag> where __Actions::$fdata: $crate::Flag {
+            $($fvis fn $f(&self) -> &$crate::shared::Shared<$fty, <__Actions as $crate::r#struct::FieldFlag<$crate::struct_assoc_type!($Struct::Fields::$f)>>::Flag> where __Actions::$fdata: $crate::Flag {
                    self.$f.as_ref().unwrap()
                }
             )*
             #[allow(dead_code)]
-            fn with_actions<__ImpliedActions: $StructActions>(&self) -> &$Struct<__ImpliedActions>
+            $vis fn with_actions<__ImpliedActions: $StructActions>(&self) -> &$Struct<__ImpliedActions>
             where
                 Self: std::convert::AsRef<$Struct<__ImpliedActions>>
             {
