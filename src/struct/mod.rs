@@ -1624,6 +1624,11 @@ macro_rules! struct_initializer {
         (<$crate::r#struct::Init::<$crate::struct_assoc_type!({$Struct}::Fields::$s),_>>::from(|| $init), $crate::struct_initializer!($Struct {$($($r)*)?}))
     };
     ($Struct:ty {
+        $s:ident$(, $($r:tt)*)?
+    }) => {
+        (<$crate::r#struct::Init::<$crate::struct_assoc_type!({$Struct}::Fields::$s),_>>::from(|| $s), $crate::struct_initializer!($Struct {$($($r)*)?}))
+    };
+    ($Struct:ty {
         |$s:ident: {$($init:tt)*}$(, $($r:tt)*)?
     }) => {
         (
