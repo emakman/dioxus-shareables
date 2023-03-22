@@ -178,7 +178,6 @@ pub mod assoc_type;
 ///     // a_state.calculate_from_a_and_c(); // This will fail since `a_state` doesn't meet the
 ///                                          // `c: RW` requirement.
 ///     b_state.calculate_from_a_and_c(); // This works.
-///     type resolves correctly.
 ///     # cx.render(rsx! { div {} })
 /// }
 /// ```
