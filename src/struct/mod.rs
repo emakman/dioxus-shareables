@@ -336,8 +336,8 @@ macro_rules! shareable_struct {
             actions: [$($actions)*]
         }
     };
-    ($Struct:ident {$($init:tt)*}) => {$crate::arcmap::ArcMap::new(<<$Struct as $crate::r#struct::ShareableStruct>::Content>::from($crate::struct_initializer!($Struct {$($init)*})))};
-    ($Struct:ident<{$($actions:tt)*}>) => ($Struct<$crate::struct_actions!($Struct { $($actions)* })>);
+    ($S:ident$(::$truct:ident)*<{$($actions:tt)*}>) => ($S$(::$truct)*<$crate::struct_actions!($S$(::$truct)* { $($actions)* })>);
+    ($Struct:ty {$($init:tt)*}) => {$crate::arcmap::ArcMap::new(<<$Struct as $crate::r#struct::ShareableStruct>::Content>::from($crate::struct_initializer!($Struct {$($init)*})))};
 }
 
 #[doc(hidden)]
